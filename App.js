@@ -23,14 +23,13 @@ import ForumScreen from './screens/ForumScreen';
 import PrivateMessagesScreen from './screens/PrivateMessagesScreen';
 
 const firebaseConfig = {
-  apiKey: "",
-  authDomain: "fir-test-b3f66.firebaseapp.com",
-  databaseURL: "https://fir-test-b3f66-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "fir-test-b3f66",
-  storageBucket: "fir-test-b3f66.firebasestorage.app",
-  messagingSenderId: "896839969752",
-  appId: "1:896839969752:web:e655fe02166110def720ad",
-  measurementId: "G-ELVNEG5Y1L"
+  apiKey: "AIzaSyAFy_5IqdOwBZPnel-nOuJaaJ61TyjI9Ms",
+  authDomain: "hotspot-8eff0.firebaseapp.com",
+  databaseURL: "https://hotspot-8eff0-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "hotspot-8eff0",
+  storageBucket: "hotspot-8eff0.appspot.com",
+  messagingSenderId: "746177310995",
+  appId: "1:746177310995:web:08504894fc91398115eae6"
 };
 
 
