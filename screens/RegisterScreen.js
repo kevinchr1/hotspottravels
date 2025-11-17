@@ -5,6 +5,7 @@ import { getDatabase, ref, set } from 'firebase/database'; // Importerer Firebas
 import Colors from '../constants/Colors';
 import { Image } from 'react-native';
 import BlueButton from '../components/BlueButton';
+import KeyboardScreen from '../components/KeyboardScreen';
 
 /**
  * RegisterScreen er en skærm, der giver brugeren mulighed for at registrere sig.
@@ -46,6 +47,7 @@ const RegisterScreen = ({ navigation }) => {
   };
 
   return (
+    <KeyboardScreen contentContainerStyle={styles.container}>
     <View style={styles.container}>
       <Image source={require('../assets/signup.png')} style={{width: 300, height: 300}} />
       <Text style={styles.title}>Sign up</Text>
@@ -76,12 +78,14 @@ const RegisterScreen = ({ navigation }) => {
 
       <Button title="Tilbage til Login" onPress={() => navigation.navigate('Login')} /> 
     </View>
+    </KeyboardScreen>
   );
 };
 
 // Styling af komponenter
 const styles = StyleSheet.create({
     container: {
+      flexGrow: 1,
       flex: 1,
       padding: 20,
       backgroundColor: Colors.primary, // Lys blå baggrund for en blødere effekt

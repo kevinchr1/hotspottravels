@@ -1,9 +1,14 @@
 import React, { useState } from 'react'; // Importerer React og useState hook
-import { View, TextInput, StyleSheet, Text, Button } from 'react-native'; // Importerer nødvendige komponenter fra React Native
+import {  View, 
+  TextInput, 
+  StyleSheet, 
+  Text, 
+  Button} from 'react-native'; // Importerer nødvendige komponenter fra React Native
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth'; // Importerer Firebase autentificeringsfunktioner
 import { Image } from 'react-native';
 import Colors from '../constants/Colors';
 import BlueButton from '../components/BlueButton';
+import KeyboardScreen from '../components/KeyboardScreen';
 
 /**
  * LoginScreen er en skærm, der giver brugeren mulighed for at logge ind.
@@ -30,34 +35,42 @@ const LoginScreen = ({ navigation }) => {
   };
 
   return (
-    <View style={styles.container}> 
-      <Image source={require('../assets/login.png')} style={{width: 300, height: 300}} />
-      <Text style={styles.title}>Sign in</Text>
-      <TextInput
-        placeholder="Email" // Pladsholder tekst for email-input
-        value={email} // Værdi af email-input
-        onChangeText={setEmail} // Opdaterer email state ved ændringer
-        style={styles.input} // Anvender stil til inputfeltet
-      />
-      <TextInput
-        placeholder="Password" // Pladsholder tekst for adgangskode-input
-        value={password} // Værdi af adgangskode-input
-        onChangeText={setPassword} // Opdaterer adgangskode state ved ændringer
-        secureTextEntry // Gør, at adgangskoden vises som prikker
-        style={styles.input} // Anvender stil til inputfeltet
-      />
-      <BlueButton text="Login" action={handleLogin} />
-      {error && <Text style={styles.error}>{error}</Text>} 
-      <View style={styles.spacing} />
-      <Text style={{textAlign: 'center'}}>Don't have an account?</Text>
-      <Button title="Sign up" onPress={() => navigation.navigate('Signup')} /> 
-    </View>
+    <KeyboardScreen contentContainerStyle={styles.container}>
+    <Image source={require('../assets/login.png')} style={{width: 300, height: 300}} />
+    <Text style={styles.title}>LOG IND</Text>
+
+    <TextInput
+      placeholder="Email" // Pladsholder tekst for email-input
+      value={email} // Værdi af email-input
+      onChangeText={setEmail} // Opdaterer email state ved ændringer
+      style={styles.input} // Anvender stil til inputfeltet
+    />
+
+    <TextInput
+      placeholder="Password" // Pladsholder tekst for adgangskode-input
+      value={password} // Værdi af adgangskode-input
+      onChangeText={setPassword} // Opdaterer adgangskode state ved ændringer
+      secureTextEntry // Gør, at adgangskoden vises som prikker
+      style={styles.input} // Anvender stil til inputfeltet
+    />
+
+    <BlueButton text="Login" action={handleLogin} />
+
+    {error && <Text style={styles.error}>{error}</Text>} 
+
+    <View style={styles.spacing} />
+
+    <Text style={{textAlign: 'center'}}>Don't have an account?</Text>
+
+    <Button title="Sign up" onPress={() => navigation.navigate('Signup')} /> 
+  </KeyboardScreen>
   );
 };
 
 // Styling af komponenter
 const styles = StyleSheet.create({
     container: {
+      flexGrow: 1,
       flex: 1,
       padding: 20,
       backgroundColor: Colors.primary, // Lys blå baggrund for en blødere effekt
