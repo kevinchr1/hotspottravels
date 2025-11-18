@@ -4,7 +4,7 @@ const Colors = {
     primary: '#FAFFF6',
     secondary: '#FAFFF6',
     activeNavigation: '#FAFFF6',
-    buttonColor: '#0D7AFF',
+    buttonColor: '#FFA500',
     white: '#FFFFFF',
 };
 

@@ -76,6 +76,7 @@ export default function App() {
   const AppTabs = () => (
     <Tab.Navigator
       screenOptions={{
+        headerShown: false,
         tabBarActiveTintColor: "black",
         tabBarInactiveTintColor: "black",
         tabBarActiveBackgroundColor: Colors.activeNavigation,

@@ -36,8 +36,14 @@ const LoginScreen = ({ navigation }) => {
 
   return (
     <KeyboardScreen contentContainerStyle={styles.container}>
-    <Image source={require('../assets/login.png')} style={{width: 300, height: 300}} />
-    <Text style={styles.title}>LOG IND</Text>
+<View style={styles.imageWrapper}>
+  <Image 
+    source={require('../assets/hotspotlogo.png')} 
+    style={styles.image}
+  />
+</View>
+
+    {/*<Text style={styles.title}>LOG IND</Text>*/}
 
     <TextInput
       placeholder="Email" // Pladsholder tekst for email-input
@@ -98,6 +104,17 @@ const styles = StyleSheet.create({
     },
     spacing: {
       height: 20, // Justerbar afstand mellem knapper
+    },
+    imageWrapper: {
+      alignItems: 'center',   // Centrerer billedet horisontalt
+      marginBottom: 40,       // Løfter billedet ved at skabe afstand til inputs
+      marginTop: 20,          // Giver lidt luft fra toppen
+    },
+    
+    image: {
+      width: 280, 
+      height: 280,
+      resizeMode: 'contain',
     },
   });
 

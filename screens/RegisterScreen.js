@@ -49,7 +49,12 @@ const RegisterScreen = ({ navigation }) => {
   return (
     <KeyboardScreen contentContainerStyle={styles.container}>
     <View style={styles.container}>
-      <Image source={require('../assets/signup.png')} style={{width: 300, height: 300}} />
+    <View style={styles.imageWrapper}>
+  <Image 
+    source={require('../assets/hotspotflame.png')}
+    style={styles.image}
+  />
+</View>
       <Text style={styles.title}>Sign up</Text>
       <TextInput
         style={styles.input} // Stil til inputfelt
@@ -108,6 +113,17 @@ const styles = StyleSheet.create({
     },
     spacing: {
       height: 20, // Justerbar afstand mellem knapper
+    },
+    imageWrapper: {
+      alignItems: 'center',     // Centrerer billedet horisontalt
+      marginTop: 20,            // Giver luft fra toppen
+      marginBottom: 40,         // Giver luft ned mod input felterne
+    },
+    
+    image: {
+      width: 260,
+      height: 260,
+      resizeMode: 'contain',    // Forhindrer cropping top/bund
     },
   });
 
