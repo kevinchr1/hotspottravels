@@ -10,21 +10,21 @@ import {
 } from 'react-native';
 import MapView, { Marker, Callout } from 'react-native-maps';
 import * as Location from 'expo-location';
-import { getDatabase, ref, onValue, off } from "firebase/database";
-import { useNavigation } from '@react-navigation/native';
+import { getDatabase, ref, onValue, off, get } from "firebase/database";
+import { getAuth } from 'firebase/auth';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '../constants/Colors';
 
 /**
- * Map er en skærm, der viser et kort som tager udgangspunkt i København.
- * Skærmen henter markører fra databasen og viser dem på kortet.
- * Markørerne er klikbare og navigerer brugeren til View_marker med markøren som prop.
- * Brugeren kan tilføje en ny markør ved at trykke på en floating button i nederste højre hjørne.
- * Brugeren skal give tilladelse til at bruge lokationsinformation.
- * Hvis brugeren ikke giver tilladelse, vises en fejlmeddelelse.
+ * Map er en skærm, der viser et kort:
+ * - Hvis bruger er i en gruppe → vi henter group.city og viser Cities/{city}/Markers
+ * - Hvis ikke i gruppe → fallback til Cities/Copenhagen/Markers
+ * Markører er klikbare og navigerer til View_marker.
+ * Brugeren kan centrere kortet på egen lokation (“My location”).
  */
 
-const Map = (props) => {
+const Map = () => {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const mapRef = useRef(null);
@@ -32,13 +32,17 @@ const Map = (props) => {
   const [markers, setMarkers] = useState([]);
   const [locationGranted, setLocationGranted] = useState(false);
   const [userLocation, setUserLocation] = useState(null);
+  const [cityKey, setCityKey] = useState('Copenhagen'); // default
+  const [currentGroupName, setCurrentGroupName] = useState(null);
+
+  const auth = getAuth();
 
   // Flag til midlertidigt at slå "Add Marker"-knappen fra.
   // Sæt til true igen når brugere må tilføje spots.
-  const enableAddMarker = true;
+  const enableAddMarker = false;
 
+  // Lokationstilladelse + hent brugerens lokation (kører kun én gang)
   useEffect(() => {
-    // Der bedes om tilladelse til at bruge lokalitets information.
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
@@ -47,42 +51,103 @@ const Map = (props) => {
       }
       setLocationGranted(true);
 
-      // Hent brugerens aktuelle lokation til "My location" knappen
       try {
         const loc = await Location.getCurrentPositionAsync({});
-        setUserLocation({
+        const coords = {
           latitude: loc.coords.latitude,
           longitude: loc.coords.longitude,
-        });
+        };
+        setUserLocation(coords);
+
+        // Centrer automatisk på brugerens lokation
+        if (mapRef.current) {
+          mapRef.current.animateToRegion(
+            {
+              ...coords,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            },
+            500
+          );
+        }
       } catch (err) {
         console.log("Error getting current position:", err);
       }
     })();
-
-    // Her hentes markører fra databasen.
-    const db = getDatabase();
-    const markersRef = ref(db, 'Cities/Copenhagen/Markers');
-    onValue(markersRef, (snapshot) => {
-      const data = snapshot.val();
-      // Det objekt som kommer fra databasen omdannes til et array af markører.
-      // Derudover konverteres lat/lng fra strings til floats, dette er nødvendigt for android kompatibilitet.
-      if (data) {
-        const markersArray = Object.keys(data).map(key => ({
-          ...data[key],
-          id: key, // Include the key as an ID for each marker
-          latlng: {
-            latitude: parseFloat(data[key].latlng.latitude),  // Ensure latitude is a float
-            longitude: parseFloat(data[key].latlng.longitude) // Ensure longitude is a float
-          }
-        }));
-        setMarkers(markersArray);
-      }
-    });
-
-    return () => {
-      off(markersRef);
-    };
   }, []);
+
+  // Hent gruppe + markers hver gang Map får fokus
+  useFocusEffect(
+    React.useCallback(() => {
+      const user = auth.currentUser;
+      const db = getDatabase();
+      let markersRef = null;
+      let cancelled = false;
+
+      const fetchData = async () => {
+        // default fallback
+        let effectiveCity = 'Copenhagen';
+        let groupName = null;
+
+        try {
+          if (user) {
+            const userRef = ref(db, 'users/' + user.uid);
+            const userSnap = await get(userRef);
+
+            if (userSnap.exists()) {
+              const userData = userSnap.val();
+              const currentGroupId = userData.currentGroupId;
+
+              if (currentGroupId) {
+                const groupRef = ref(db, 'groups/' + currentGroupId);
+                const groupSnap = await get(groupRef);
+
+                if (groupSnap.exists()) {
+                  const groupData = groupSnap.val();
+                  effectiveCity = groupData.city || 'Copenhagen';
+                  groupName = groupData.name || null;
+                }
+              }
+            }
+          }
+
+          if (cancelled) return;
+
+          setCityKey(effectiveCity);
+          setCurrentGroupName(groupName);
+
+          // Lyt på Cities/{city}/Markers
+          markersRef = ref(db, `Cities/${effectiveCity}/Markers`);
+          onValue(markersRef, (snapshot) => {
+            if (cancelled) return;
+            const data = snapshot.val();
+            if (data) {
+              const markersArray = Object.keys(data).map(key => ({
+                ...data[key],
+                id: key,
+                latlng: {
+                  latitude: parseFloat(data[key].latlng.latitude),
+                  longitude: parseFloat(data[key].latlng.longitude)
+                }
+              }));
+              setMarkers(markersArray);
+            } else {
+              setMarkers([]);
+            }
+          });
+        } catch (err) {
+          console.log("Map fetch error:", err);
+        }
+      };
+
+      fetchData();
+
+      return () => {
+        cancelled = true;
+        if (markersRef) off(markersRef);
+      };
+    }, [auth])
+  );
 
   // "My location" knap handler
   const handleMyLocation = () => {
@@ -114,18 +179,32 @@ const Map = (props) => {
       </View>
 
       <View style={styles.contentWrapper}>
-        {/* Next activity banner (dummy data for nu) */}
+        {/* Next activity banner – kan senere kobles til gruppens schedule */}
         <View style={styles.activityCard}>
-          <Text style={styles.activityLabel}>Next activity</Text>
-          <Text style={styles.activityTitle}>Welcome drinks at Beach Bar</Text>
-          <Text style={styles.activityMeta}>Tonight · 20:30 · 5 min walk</Text>
-          <TouchableOpacity 
-            style={styles.activityButton}
-            onPress={() => Alert.alert("Coming soon", "Trip schedule will be added later.")}
-          >
-            <Text style={styles.activityButtonText}>View schedule</Text>
-          </TouchableOpacity>
-        </View>
+  {currentGroupName ? (
+    <>
+      <Text style={styles.activityLabel}>Your trip</Text>
+      <Text style={styles.activityTitle}>{currentGroupName}</Text>
+      <Text style={styles.activityMeta}>City: {cityKey}</Text>
+      <TouchableOpacity 
+        style={styles.activityButton}
+        onPress={() =>
+          Alert.alert("Coming soon", "Trip schedule will be added later.")
+        }
+      >
+        <Text style={styles.activityButtonText}>View schedule</Text>
+      </TouchableOpacity>
+    </>
+  ) : (
+    <>
+      <Text style={styles.activityLabel}>No activity group</Text>
+      <Text style={styles.activityTitle}>You are not in a Hotspot group</Text>
+      <Text style={styles.activityMeta}>
+        Join a trip from your profile to see your schedule here.
+      </Text>
+    </>
+  )}
+</View>
 
         {/* Search + filter row */}
         <View style={styles.searchAndFilters}>
@@ -152,37 +231,38 @@ const Map = (props) => {
                 ref={mapRef}
                 style={styles.map}
                 initialRegion={{
+                  // fallback – vi centrerer alligevel på userLocation når vi har den
                   latitude: 55.676098,
                   longitude: 12.568337,
                   latitudeDelta: 0.0922,
                   longitudeDelta: 0.0421
                 }}
                 showsUserLocation
-                showsMyLocationButton={false} // Vi bruger vores egen "My location" knap
+                showsMyLocationButton={false}
                 showsCompass
                 showsScale
               >
                 {markers.map((marker) => (
                   <Marker
-                  key={marker.id}
-                  coordinate={marker.latlng}
-                  anchor={{ x: 0.5, y: 1 }}   // anchor ændring
-                >
-                  <Image 
-                    source={require('../assets/hotspotflame.png')}
-                    style={{ width: 25, height: 35, resizeMode: 'contain' }}
-                  />
-                  <Callout onPress={() => navigation.navigate('View_marker', { marker })}>
+                    key={marker.id}
+                    coordinate={marker.latlng}
+                    anchor={{ x: 0.5, y: 1 }}   // pin-spidsen nederst
+                  >
+                    <Image 
+                      source={require('../assets/hotspotflame.png')}
+                      style={{ width: 25, height: 35, resizeMode: 'contain' }}
+                    />
+                    <Callout onPress={() => navigation.navigate('View_marker', { marker })}>
                       <View style={styles.callout}>
-                          <Text style={styles.title}>{marker.title}</Text>
-                          <Text style={styles.type}>{marker.type}</Text>
-                          <Text style={styles.description}>{marker.description}</Text>
-                          <View style={styles.button}>
-                              <Text>See more</Text>
-                          </View>
+                        <Text style={styles.title}>{marker.title}</Text>
+                        <Text style={styles.type}>{marker.type}</Text>
+                        <Text style={styles.description}>{marker.description}</Text>
+                        <View style={styles.button}>
+                          <Text>See more</Text>
+                        </View>
                       </View>
-                  </Callout>
-                </Marker>
+                    </Callout>
+                  </Marker>
                 ))}
               </MapView>
 
@@ -235,7 +315,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
   },
   headerContainer: {
-    backgroundColor: '#fff',   // Helt hvid bag logo
+    backgroundColor: '#fff',
     paddingBottom: 10,
     alignItems: 'center',
     borderBottomWidth: 2,

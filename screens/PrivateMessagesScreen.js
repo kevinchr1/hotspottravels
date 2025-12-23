@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -16,10 +16,18 @@ import * as ImagePicker from 'expo-image-picker';
 import { Image as RNImage } from 'react-native';
 import FullImageModal from '../components/FullImageModal';
 
+import { getAuth } from 'firebase/auth';
+import { getDatabase, ref, onValue, off, push } from 'firebase/database';
+
+const NAVY = '#1E3250';
+const ORANGE = '#FFA500';
+const DARK_ORANGE = '#CC7A00';
+
 const PrivateMessagesScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const route = useRoute();
+  const auth = getAuth();
 
   const { groupId, groupName } = route.params || {};
   const title = groupName || 'Group chat';
@@ -27,52 +35,130 @@ const PrivateMessagesScreen = () => {
   const [fullImageVisible, setFullImageVisible] = useState(false);
   const [fullImageStartIndex, setFullImageStartIndex] = useState(0);
 
-  const [messages, setMessages] = useState([
-    {
-      id: '1',
-      text: 'Welcome to the group chat.',
-      isMe: false,
-      time: '19:02',
-      author: 'Host',
-    },
-    {
-      id: '2',
-      text: 'Remember welcome drinks at the beach bar tonight.',
-      isMe: false,
-      time: '19:05',
-      author: 'Host',
-    },
-    {
-      id: '3',
-      text: 'Nice! See you there.',
-      isMe: true,
-      time: '19:07',
-      author: 'You',
-    },
-  ]);
-
+  const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
+  const [username, setUsername] = useState('You');
 
-  // alle billed-beskeder (til galleriet)
+  // Hent username til den aktuelle bruger
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const db = getDatabase();
+    const userRef = ref(db, 'users/' + user.uid);
+
+    const unsubscribe = onValue(userRef, (snap) => {
+      const data = snap.val();
+      if (data && data.username) {
+        setUsername(data.username);
+      } else if (user.email) {
+        setUsername(user.email.split('@')[0]);
+      }
+    });
+
+    return () => {
+      off(userRef);
+      unsubscribe();
+    };
+  }, []);
+
+  // Lyt live på groupMessages/{groupId}
+  useEffect(() => {
+    if (!groupId) return;
+
+    const db = getDatabase();
+    const msgsRef = ref(db, `groupMessages/${groupId}`);
+
+    const unsubscribe = onValue(msgsRef, (snapshot) => {
+      const data = snapshot.val();
+      const user = auth.currentUser;
+
+      if (!data) {
+        setMessages([]);
+        return;
+      }
+
+      const list = Object.keys(data)
+        .map((key) => {
+          const m = data[key];
+          const mine = user && m.userId === user.uid;
+
+          let time = '';
+          if (m.createdAt) {
+            const d = new Date(m.createdAt);
+            const hh = d.getHours().toString().padStart(2, '0');
+            const mm = d.getMinutes().toString().padStart(2, '0');
+            time = `${hh}:${mm}`;
+          }
+
+          return {
+            id: key,
+            text: m.text || '',
+            image: m.image || null,
+            isMe: mine,
+            time: time || 'Now',
+            author: m.userName || 'Traveler',
+            createdAt: m.createdAt || 0,
+          };
+        })
+        .sort((a, b) => a.createdAt - b.createdAt);
+
+      setMessages(list);
+    });
+
+    return () => {
+      off(msgsRef);
+      unsubscribe();
+    };
+  }, [groupId]);
+
   const imageMessages = messages.filter((m) => m.image);
   const imageUris = imageMessages.map((m) => m.image);
 
-  const handleSend = () => {
-    if (!input.trim()) return;
+  const handleSend = async () => {
+    const user = auth.currentUser;
+    if (!user) {
+      alert('You must be logged in to send messages.');
+      return;
+    }
+    if (!groupId) {
+      alert('No group selected.');
+      return;
+    }
 
-    const newMessage = {
-      id: Date.now().toString(),
-      text: input.trim(),
-      isMe: true,
-      time: 'Now',
-      author: 'You',
-    };
+    const text = input.trim();
+    if (!text) return;
 
-    setMessages((prev) => [...prev, newMessage]);
-    setInput('');
+    try {
+      const db = getDatabase();
+      const msgsRef = ref(db, `groupMessages/${groupId}`);
+
+      await push(msgsRef, {
+        text,
+        image: null,
+        userId: user.uid,
+        userName: username,
+        createdAt: Date.now(),
+      });
+
+      setInput('');
+    } catch (err) {
+      console.log('Error sending message:', err);
+      alert('Could not send message.');
+    }
   };
 
   const handlePickImage = async () => {
+    const user = auth.currentUser;
+    if (!user) {
+      alert('You must be logged in to send images.');
+      return;
+    }
+    if (!groupId) {
+      alert('No group selected.');
+      return;
+    }
+
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permission.granted) {
@@ -86,58 +172,93 @@ const PrivateMessagesScreen = () => {
     });
 
     if (!result.canceled) {
-      const newMessage = {
-        id: Date.now().toString(),
-        image: result.assets[0].uri,
-        isMe: true,
-        time: 'Now',
-        author: 'You',
-      };
+      const uri = result.assets[0].uri;
 
-      setMessages((prev) => [...prev, newMessage]);
+      try {
+        const db = getDatabase();
+        const msgsRef = ref(db, `groupMessages/${groupId}`);
+
+        await push(msgsRef, {
+          text: '',
+          image: uri,
+          userId: user.uid,
+          userName: username,
+          createdAt: Date.now(),
+        });
+      } catch (err) {
+        console.log('Error sending image message:', err);
+        alert('Could not send image.');
+      }
     }
   };
 
-  const renderMessage = ({ item }) => {
-    const containerStyle = item.isMe
-      ? [styles.messageRow, styles.messageRowRight]
-      : [styles.messageRow, styles.messageRowLeft];
+  const renderMessage = ({ item, index }) => {
+    const previous = index > 0 ? messages[index - 1] : null;
+    const sameAuthorAsPrev = previous && previous.author === item.author;
+    const showAuthor = !sameAuthorAsPrev;
 
-    const bubbleStyle = item.isMe
-      ? [styles.bubble, styles.bubbleMe]
-      : [styles.bubble, styles.bubbleOther];
-
-    const textStyle = item.isMe ? styles.bubbleTextMe : styles.bubbleTextOther;
-
-    const handlePressImage = () => {
-      // find index for denne besked i billed-listen
-      const idx = imageMessages.findIndex((m) => m.id === item.id);
-      setFullImageStartIndex(idx >= 0 ? idx : 0);
-      setFullImageVisible(true);
-    };
+    const isMe = item.isMe;
 
     return (
-      <View style={containerStyle}>
-        <View style={bubbleStyle}>
-          {item.image ? (
-            <TouchableOpacity activeOpacity={0.8} onPress={handlePressImage}>
-              <RNImage
-                source={{ uri: item.image }}
-                style={{
-                  width: 180,
-                  height: 180,
-                  borderRadius: 12,
-                  marginBottom: 6,
-                  backgroundColor: '#eee',
-                }}
-                resizeMode="cover"
-              />
-            </TouchableOpacity>
-          ) : (
-            <Text style={textStyle}>{item.text}</Text>
+      <View
+        style={[
+          styles.messageRow,
+          isMe ? styles.messageRowRight : styles.messageRowLeft,
+        ]}
+      >
+        {/* Avatar kun for andre brugere */}
+        {!isMe && (
+          <View style={styles.avatarContainer}>
+            <Text style={styles.avatarInitial}>
+              {(item.author || '?').charAt(0).toUpperCase()}
+            </Text>
+          </View>
+        )}
+
+        <View
+          style={[
+            styles.messageContent,
+            isMe && { alignItems: 'flex-end' },
+          ]}
+        >
+          {/* Navn over første besked i blokken */}
+          {showAuthor && (
+            <Text style={styles.authorText}>{item.author || 'Unknown'}</Text>
           )}
 
-          <Text style={styles.timeText}>{item.time}</Text>
+          <View
+            style={[
+              styles.bubble,
+              isMe ? styles.bubbleMe : styles.bubbleOther,
+            ]}
+          >
+            {item.image ? (
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => {
+                  const idx = imageMessages.findIndex((m) => m.id === item.id);
+                  setFullImageStartIndex(idx >= 0 ? idx : 0);
+                  setFullImageVisible(true);
+                }}
+              >
+                <RNImage
+                  source={{ uri: item.image }}
+                  style={styles.imageInBubble}
+                  resizeMode="cover"
+                />
+              </TouchableOpacity>
+            ) : (
+              <Text
+                style={
+                  isMe ? styles.bubbleTextMe : styles.bubbleTextOther
+                }
+              >
+                {item.text}
+              </Text>
+            )}
+
+            <Text style={styles.timeText}>{item.time}</Text>
+          </View>
         </View>
       </View>
     );
@@ -169,7 +290,14 @@ const PrivateMessagesScreen = () => {
       >
         {/* Messages */}
         <View style={styles.messagesContainer}>
-          {messages.length === 0 ? (
+          {!groupId ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyTitle}>No group selected</Text>
+              <Text style={styles.emptyText}>
+                Go back to Messages and open a group chat.
+              </Text>
+            </View>
+          ) : messages.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyTitle}>No messages yet</Text>
               <Text style={styles.emptyText}>
@@ -182,7 +310,6 @@ const PrivateMessagesScreen = () => {
               keyExtractor={(item) => item.id}
               renderItem={renderMessage}
               contentContainerStyle={styles.messagesContent}
-              inverted={false}
             />
           )}
         </View>
@@ -216,9 +343,6 @@ const PrivateMessagesScreen = () => {
     </View>
   );
 };
-
-const NAVY = '#1E3250';
-const ORANGE = '#FFA500';
 
 const styles = StyleSheet.create({
   screen: {
@@ -271,9 +395,11 @@ const styles = StyleSheet.create({
   messagesContent: {
     paddingBottom: 8,
   },
+
   messageRow: {
-    marginVertical: 4,
+    width: '100%',
     flexDirection: 'row',
+    marginVertical: 4,
   },
   messageRowLeft: {
     justifyContent: 'flex-start',
@@ -281,8 +407,35 @@ const styles = StyleSheet.create({
   messageRowRight: {
     justifyContent: 'flex-end',
   },
+
+  avatarContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFD9A3',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+    marginTop: 18,
+  },
+  avatarInitial: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: DARK_ORANGE,
+  },
+
+  messageContent: {
+    maxWidth: '80%',
+  },
+
+  authorText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: DARK_ORANGE,
+    marginBottom: 4,
+  },
+
   bubble: {
-    maxWidth: '75%',
     borderRadius: 16,
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -303,12 +456,20 @@ const styles = StyleSheet.create({
     color: NAVY,
     fontSize: 14,
   },
+  imageInBubble: {
+    width: 180,
+    height: 180,
+    borderRadius: 12,
+    marginBottom: 6,
+    backgroundColor: '#eee',
+  },
   timeText: {
     fontSize: 10,
     color: '#EEE',
     marginTop: 3,
     textAlign: 'right',
   },
+
   emptyState: {
     flex: 1,
     alignItems: 'center',
@@ -326,6 +487,7 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
   },
+
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',

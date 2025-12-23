@@ -21,6 +21,7 @@ import ProfileScreen from './screens/ProfileScreen';
 import ActivitiesScreen from './screens/ActivitiesScreen';
 import ForumScreen from './screens/ForumScreen';
 import PrivateMessagesScreen from './screens/PrivateMessagesScreen';
+import EditProfileScreen from './screens/EditProfileScreen';
 
 const firebaseConfig = {
   apiKey: "AIzaSyAFy_5IqdOwBZPnel-nOuJaaJ61TyjI9Ms",
@@ -114,7 +115,7 @@ export default function App() {
           tabBarIcon: () => (
             <Image
               source={require('./assets/activitylogo.png')}
-              style={{ width: 40, height: 40, resizeMode: 'contain'  }}
+              style={{ width: 36, height: 36, resizeMode: 'contain'  }}
             />
           ),
         }}
@@ -126,7 +127,7 @@ export default function App() {
           tabBarIcon: () => (
             <Image
               source={require('./assets/chatlogo.png')}
-              style={{ width: 40, height: 40, resizeMode: 'contain'  }}
+              style={{ width: 36, height: 36, resizeMode: 'contain'  }}
             />
           ),
         }}
@@ -153,6 +154,7 @@ export default function App() {
       <Stack.Screen name="View_marker" component={View_marker} />
       <Stack.Screen name="Add Marker" component={Add_edit_marker} />
       <Stack.Screen name="Private messages" component={PrivateMessagesScreen} />
+      <Stack.Screen name="EditProfile" component={EditProfileScreen} />
     </Stack.Navigator>
   );
 
