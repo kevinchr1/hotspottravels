@@ -175,10 +175,10 @@ const styles = StyleSheet.create({
     borderBottomColor: ORANGE,
   },
   headerLogoImage: {
-    width: 40,
-    height: 40,
+    width: 52,
+    height: 52,
     resizeMode: 'contain',
-    marginBottom: 4,
+    marginBottom: 0,
   },
   headerTitle: {
     fontSize: 16,

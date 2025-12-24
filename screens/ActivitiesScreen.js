@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
   emptyCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 16,
+    padding: 20,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: '#EEE',
@@ -403,6 +403,8 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 13,
     color: '#666',
+    lineHeight: 19,           // ny
+    marginBottom: 14,         // ny (giver luft til knappen)
   },
   activitiesList: {
     marginTop: 4,
@@ -484,12 +486,14 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingVertical: 10,      // var 6
+    borderRadius: 10,         // var 8
     backgroundColor: ORANGE,
+    marginTop: 6,             // ny
   },
+  
   primaryButtonText: {
-    fontSize: 12,
+    fontSize: 13,             // var 12 (læsbar CTA)
     color: '#fff',
     fontWeight: '600',
   },

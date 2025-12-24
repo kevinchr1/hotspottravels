@@ -1,18 +1,18 @@
-import React, { useState, useEffect } from 'react'; // Til brug af hooks som useState og useEffect
-import { StyleSheet } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Image, View } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { getApps, initializeApp } from "firebase/app"; 
-import {NavigationContainer} from "@react-navigation/native";
-import {createStackNavigator} from "@react-navigation/stack";
-import { Image } from 'react-native';
-import Colors from './constants/Colors';
-import { getAuth, onAuthStateChanged } from 'firebase/auth'; // Firebase authentication
-import { getDatabase } from 'firebase/database'; // Firebase Realtime Database
+import { createStackNavigator } from '@react-navigation/stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { getApps, initializeApp } from 'firebase/app';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { getDatabase } from 'firebase/database';
 
-//Her importeres vores screens
-import Map from "./screens/map";
+import Colors from './constants/Colors';
+
+// Screens
+import Map from './screens/map';
 import Add_edit_marker from './screens/Add_edit_marker';
 import View_marker from './screens/View_marker';
 import LoginScreen from './screens/LoginScreen';
@@ -23,6 +23,7 @@ import ForumScreen from './screens/ForumScreen';
 import PrivateMessagesScreen from './screens/PrivateMessagesScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
 
+// Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyAFy_5IqdOwBZPnel-nOuJaaJ61TyjI9Ms",
   authDomain: "hotspot-8eff0.firebaseapp.com",
@@ -33,145 +34,160 @@ const firebaseConfig = {
   appId: "1:746177310995:web:08504894fc91398115eae6"
 };
 
-
 if (getApps().length < 1) {
   const app = initializeApp(firebaseConfig);
-  const database = getDatabase(app);
-  console.log("Firebase On!");
+  getDatabase(app);
+  console.log('Firebase On!');
 }
 
-/**
- * App er vores hovedkomponent, der styrer navigationen i appen.
- * Komponenten indeholder en state variabel, der holder styr på brugerens login-status.
- * Der er to navigationer: en for brugere der er logget ind og en for brugere der ikke er.
- * Hvis brugeren er logget ind, vises en bundnavigation med fire faner.
- * Hvis brugeren ikke er logget ind, vises en stak med to skærme: Login og Signup.
- */
+const Stack = createStackNavigator();
+const Tab = createBottomTabNavigator();
 
+const NAVY = '#1E3250';
+const ORANGE_DARK = '#E69500';
 
-export default function App() {
-  const [user, setUser] = useState(null); // Opretter en state variabel for brugerens login-status
-
-  // Tjekker om brugeren er logget ind
-  useEffect(() => {
-    const auth = getAuth(); // Henter Firebase Auth
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => { // Lyt efter ændringer i brugerens login-status
-      setUser(currentUser); // Opdater state med den aktuelle bruger
-    });
-
-    return unsubscribe; // Ryd op i listeneren når komponenten unmountes
-  }, []);
-
-
-  const Stack = createStackNavigator();
-  const Tab = createBottomTabNavigator();
-  // Logged-Out Navigation
-  const AuthStack = () => (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="Signup" component={RegisterScreen} />
-    </Stack.Navigator>
+/* ---------- TAB ICON COMPONENT ---------- */
+const TabItem = ({ focused, source, size }) => {
+  return (
+    <View style={{ alignItems: 'center' }}>
+      <Image
+        source={source}
+        style={{
+          width: focused ? size + 2 : size,
+          height: focused ? size + 2 : size,
+          resizeMode: 'contain',
+          opacity: focused ? 1 : 0.55,
+        }}
+      />
+      <View
+        style={{
+          marginTop: 6,
+          height: 3,
+          width: 22,
+          borderRadius: 2,
+          backgroundColor: focused ? ORANGE_DARK : 'transparent',
+        }}
+      />
+    </View>
   );
+};
 
-  // Logged-In Navigation with Tabs
-  const AppTabs = () => (
-    <Tab.Navigator
+/* ---------- AUTH STACK ---------- */
+const AuthStack = () => (
+  <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Screen name="Login" component={LoginScreen} />
+    <Stack.Screen name="Signup" component={RegisterScreen} />
+  </Stack.Navigator>
+);
+
+/* ---------- APP TABS ---------- */
+const AppTabs = () => (
+  <Tab.Navigator
     screenOptions={{
       headerShown: false,
-      tabBarShowLabel: true,              // sæt til false hvis du vil fjerne tekst
+      tabBarShowLabel: false,
       tabBarStyle: {
-        height: 90,                       // højere bar = mere luft
+        height: 90,
         paddingBottom: 10,
         paddingTop: 8,
         backgroundColor: Colors.primary,
+        borderTopWidth: 0,
       },
       tabBarLabelStyle: {
-        marginTop: 10,        // giver luft OVER teksten (mellem ikon og label)
         fontSize: 10,
+        marginTop: 4,
+        color: NAVY,
       },
-      tabBarActiveTintColor: "black",
-      tabBarInactiveTintColor: "black",
-      tabBarActiveBackgroundColor: Colors.activeNavigation,
-      tabBarInactiveBackgroundColor: Colors.primary,
+      tabBarActiveTintColor: NAVY,
+      tabBarInactiveTintColor: NAVY,
     }}
-    >
-      <Tab.Screen
-        name="Map"
-        component={Map}
-        options={{
-          tabBarIcon: () => (
-            <Image
-              source={require('./assets/maplogo.png')}
-              style={{ width: 45, height: 45, resizeMode: 'contain'  }}
-            />
-          ),
-        }}
-      />
-      
-      <Tab.Screen
-        name="Activities"
-        component={ActivitiesScreen}
-        options={{
-          tabBarIcon: () => (
-            <Image
-              source={require('./assets/activitylogo.png')}
-              style={{ width: 36, height: 36, resizeMode: 'contain'  }}
-            />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Messeges"
-        component={ForumScreen}
-        options={{
-          tabBarIcon: () => (
-            <Image
-              source={require('./assets/chatlogo.png')}
-              style={{ width: 36, height: 36, resizeMode: 'contain'  }}
-            />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={{
-          tabBarIcon: () => (
-            <Image
-              source={require('./assets/userlogo.png')}
-              style={{ width: 45, height: 45, resizeMode: 'contain'  }}
-            />
-          ),
-        }}
-      />
-    </Tab.Navigator>
-  );
+  >
+    <Tab.Screen
+      name="Map"
+      component={Map}
+      options={{
+        tabBarIcon: ({ focused }) => (
+          <TabItem
+            focused={focused}
+            source={require('./assets/maplogo.png')}
+            size={45}
+          />
+        ),
+      }}
+    />
 
-  // Stack for additional screens outside the Bottom Tabs
-  const MainStack = () => (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="Tabs" component={AppTabs} />
-      <Stack.Screen name="View_marker" component={View_marker} />
-      <Stack.Screen name="Add Marker" component={Add_edit_marker} />
-      <Stack.Screen name="Private messages" component={PrivateMessagesScreen} />
-      <Stack.Screen name="EditProfile" component={EditProfileScreen} />
-    </Stack.Navigator>
-  );
+    <Tab.Screen
+      name="Activities"
+      component={ActivitiesScreen}
+      options={{
+        tabBarIcon: ({ focused }) => (
+          <TabItem
+            focused={focused}
+            source={require('./assets/activitylogo.png')}
+            size={36}
+          />
+        ),
+      }}
+    />
+
+    <Tab.Screen
+      name="Messages"
+      component={ForumScreen}
+      options={{
+        tabBarIcon: ({ focused }) => (
+          <TabItem
+            focused={focused}
+            source={require('./assets/chatlogo.png')}
+            size={36}
+          />
+        ),
+      }}
+    />
+
+    <Tab.Screen
+      name="Profile"
+      component={ProfileScreen}
+      options={{
+        tabBarIcon: ({ focused }) => (
+          <TabItem
+            focused={focused}
+            source={require('./assets/userlogo.png')}
+            size={45}
+          />
+        ),
+      }}
+    />
+  </Tab.Navigator>
+);
+
+/* ---------- MAIN STACK ---------- */
+const MainStack = () => (
+  <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Screen name="Tabs" component={AppTabs} />
+    <Stack.Screen name="View_marker" component={View_marker} />
+    <Stack.Screen name="Add Marker" component={Add_edit_marker} />
+    <Stack.Screen name="Private messages" component={PrivateMessagesScreen} />
+    <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+  </Stack.Navigator>
+);
+
+/* ---------- APP ROOT ---------- */
+export default function App() {
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const auth = getAuth();
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return unsubscribe;
+  }, []);
 
   return (
     <SafeAreaProvider>
-    <NavigationContainer>
-      {user ? <MainStack /> : <AuthStack />}
-    </NavigationContainer>
+      <NavigationContainer>
+        {user ? <MainStack /> : <AuthStack />}
+      </NavigationContainer>
     </SafeAreaProvider>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+const styles = StyleSheet.create({});
