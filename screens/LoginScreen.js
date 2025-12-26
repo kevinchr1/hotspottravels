@@ -50,6 +50,7 @@ const LoginScreen = ({ navigation }) => {
       value={email} // Værdi af email-input
       onChangeText={setEmail} // Opdaterer email state ved ændringer
       style={styles.input} // Anvender stil til inputfeltet
+      placeholderTextColor="#888"
     />
 
     <TextInput
@@ -58,6 +59,7 @@ const LoginScreen = ({ navigation }) => {
       onChangeText={setPassword} // Opdaterer adgangskode state ved ændringer
       secureTextEntry // Gør, at adgangskoden vises som prikker
       style={styles.input} // Anvender stil til inputfeltet
+      placeholderTextColor="#888"
     />
 
     <BlueButton text="Login" action={handleLogin} />

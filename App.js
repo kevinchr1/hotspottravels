@@ -29,7 +29,7 @@ const firebaseConfig = {
   authDomain: "hotspot-8eff0.firebaseapp.com",
   databaseURL: "https://hotspot-8eff0-default-rtdb.europe-west1.firebasedatabase.app",
   projectId: "hotspot-8eff0",
-  storageBucket: "hotspot-8eff0.appspot.com",
+  storageBucket: "hotspot-8eff0.firebasestorage.app",
   messagingSenderId: "746177310995",
   appId: "1:746177310995:web:08504894fc91398115eae6"
 };

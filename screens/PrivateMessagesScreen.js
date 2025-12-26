@@ -1,3 +1,4 @@
+// screens/PrivateMessagesScreen.js
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -8,6 +9,7 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -15,9 +17,16 @@ import Colors from '../constants/Colors';
 import * as ImagePicker from 'expo-image-picker';
 import { Image as RNImage } from 'react-native';
 import FullImageModal from '../components/FullImageModal';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 import { getAuth } from 'firebase/auth';
 import { getDatabase, ref, onValue, off, push } from 'firebase/database';
+import {
+  getStorage,
+  ref as storageRef,
+  uploadBytes,
+  getDownloadURL,
+} from 'firebase/storage';
 
 const NAVY = '#1E3250';
 const ORANGE = '#FFA500';
@@ -38,8 +47,9 @@ const PrivateMessagesScreen = () => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [username, setUsername] = useState('You');
+  const [uploading, setUploading] = useState(false);
 
-  // Hent username til den aktuelle bruger
+  // Fetch username for current user (live)
   useEffect(() => {
     const user = auth.currentUser;
     if (!user) return;
@@ -62,7 +72,7 @@ const PrivateMessagesScreen = () => {
     };
   }, []);
 
-  // Lyt live på groupMessages/{groupId}
+  // Listen live on groupMessages/{groupId}
   useEffect(() => {
     if (!groupId) return;
 
@@ -94,7 +104,7 @@ const PrivateMessagesScreen = () => {
           return {
             id: key,
             text: m.text || '',
-            image: m.image || null,
+            imageUrl: m.imageUrl || null,
             isMe: mine,
             time: time || 'Now',
             author: m.userName || 'Traveler',
@@ -112,8 +122,8 @@ const PrivateMessagesScreen = () => {
     };
   }, [groupId]);
 
-  const imageMessages = messages.filter((m) => m.image);
-  const imageUris = imageMessages.map((m) => m.image);
+  const imageMessages = messages.filter((m) => m.imageUrl);
+  const imageUris = imageMessages.map((m) => m.imageUrl);
 
   const handleSend = async () => {
     const user = auth.currentUser;
@@ -135,7 +145,7 @@ const PrivateMessagesScreen = () => {
 
       await push(msgsRef, {
         text,
-        image: null,
+        imageUrl: null,
         userId: user.uid,
         userName: username,
         createdAt: Date.now(),
@@ -148,47 +158,128 @@ const PrivateMessagesScreen = () => {
     }
   };
 
-  const handlePickImage = async () => {
+  const uploadImageAsync = async (uri, groupId) => {
     const user = auth.currentUser;
-    if (!user) {
-      alert('You must be logged in to send images.');
-      return;
-    }
-    if (!groupId) {
-      alert('No group selected.');
-      return;
-    }
+    if (!user) throw new Error('Not logged in');
+    if (!groupId) throw new Error('No groupId');
 
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const storage = getStorage();
 
-    if (!permission.granted) {
-      alert('You need to allow gallery permissions.');
-      return;
+    const fileName = `${Date.now()}_${Math.random().toString(16).slice(2)}.jpg`;
+    const path = `chatImages/${groupId}/${user.uid}/${fileName}`;
+    const imgRef = storageRef(storage, path);
+
+    const response = await fetch(uri);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status}`);
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,
-    });
+    const blob = await response.blob();
+    console.log('Blob size:', blob.size, 'Type:', blob.type);
 
-    if (!result.canceled) {
-      const uri = result.assets[0].uri;
+    const metadata = {
+      contentType: 'image/jpeg',
+    };
 
-      try {
-        const db = getDatabase();
-        const msgsRef = ref(db, `groupMessages/${groupId}`);
+    await uploadBytes(imgRef, blob, metadata);
+    const downloadUrl = await getDownloadURL(imgRef);
 
+    return downloadUrl;
+  };
+
+  // NEW: Handle multiple images
+  const handlePickImage = async () => {
+    console.log('handlePickImage START');
+
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        console.log('handlePickImage: no user');
+        alert('You must be logged in to send images.');
+        return;
+      }
+      if (!groupId) {
+        console.log('handlePickImage: no groupId');
+        alert('No group selected.');
+        return;
+      }
+
+      console.log('Requesting media library permission...');
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      console.log('Permission result:', permission);
+
+      if (!permission.granted) {
+        alert('You need to allow gallery permissions.');
+        return;
+      }
+
+      console.log('Opening image library...');
+
+      const mediaTypeImages = ImagePicker?.MediaType?.Images ?? ImagePicker?.MediaTypeOptions?.Images;
+      console.log('Using image picker mediaTypeImages:', mediaTypeImages);
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: mediaTypeImages,
+        quality: 0.8,
+        allowsMultipleSelection: true, // ✅ NEW: Allow multiple images
+      });
+      console.log('Picker result:', result);
+
+      if (result.canceled) return;
+
+      const selectedAssets = result.assets || [];
+      if (selectedAssets.length === 0) {
+        alert('No images selected.');
+        return;
+      }
+
+      console.log(`Selected ${selectedAssets.length} image(s)`);
+      setUploading(true);
+
+      const db = getDatabase();
+      const msgsRef = ref(db, `groupMessages/${groupId}`);
+
+      // ✅ NEW: Loop through all selected images
+      for (let i = 0; i < selectedAssets.length; i++) {
+        const asset = selectedAssets[i];
+        const uri = asset.uri;
+
+        console.log(`Processing image ${i + 1}/${selectedAssets.length}: ${uri}`);
+
+        // Convert to JPEG
+        console.log('Converting image to JPEG...');
+        const manipResult = await ImageManipulator.manipulateAsync(
+          uri,
+          [],
+          { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+        );
+        console.log('Converted uri:', manipResult.uri);
+
+        // Upload to Firebase Storage
+        console.log('Uploading to Storage...');
+        const downloadUrl = await uploadImageAsync(manipResult.uri, groupId);
+        console.log('Upload done. downloadUrl:', downloadUrl);
+
+        // Save message with download URL
         await push(msgsRef, {
           text: '',
-          image: uri,
+          imageUrl: downloadUrl,
           userId: user.uid,
           userName: username,
-          createdAt: Date.now(),
+          createdAt: Date.now() + i, // Add small offset so they stay in order
         });
-      } catch (err) {
-        console.log('Error sending image message:', err);
-        alert('Could not send image.');
+
+        console.log(`Image ${i + 1} saved to DB`);
       }
+
+      setUploading(false);
+      console.log('All images uploaded successfully!');
+    } catch (err) {
+      setUploading(false);
+      console.log('handlePickImage ERROR (FULL):', err);
+      console.log('Upload error code:', err?.code);
+      console.log('Upload error message:', err?.message);
+      alert('Could not pick/upload image: ' + err.message);
     }
   };
 
@@ -206,7 +297,6 @@ const PrivateMessagesScreen = () => {
           isMe ? styles.messageRowRight : styles.messageRowLeft,
         ]}
       >
-        {/* Avatar kun for andre brugere */}
         {!isMe && (
           <View style={styles.avatarContainer}>
             <Text style={styles.avatarInitial}>
@@ -215,24 +305,13 @@ const PrivateMessagesScreen = () => {
           </View>
         )}
 
-        <View
-          style={[
-            styles.messageContent,
-            isMe && { alignItems: 'flex-end' },
-          ]}
-        >
-          {/* Navn over første besked i blokken */}
+        <View style={[styles.messageContent, isMe && { alignItems: 'flex-end' }]}>
           {showAuthor && (
             <Text style={styles.authorText}>{item.author || 'Unknown'}</Text>
           )}
 
-          <View
-            style={[
-              styles.bubble,
-              isMe ? styles.bubbleMe : styles.bubbleOther,
-            ]}
-          >
-            {item.image ? (
+          <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleOther]}>
+            {item.imageUrl ? (
               <TouchableOpacity
                 activeOpacity={0.8}
                 onPress={() => {
@@ -242,17 +321,13 @@ const PrivateMessagesScreen = () => {
                 }}
               >
                 <RNImage
-                  source={{ uri: item.image }}
+                  source={{ uri: item.imageUrl }}
                   style={styles.imageInBubble}
                   resizeMode="cover"
                 />
               </TouchableOpacity>
             ) : (
-              <Text
-                style={
-                  isMe ? styles.bubbleTextMe : styles.bubbleTextOther
-                }
-              >
+              <Text style={isMe ? styles.bubbleTextMe : styles.bubbleTextOther}>
                 {item.text}
               </Text>
             )}
@@ -266,29 +341,26 @@ const PrivateMessagesScreen = () => {
 
   return (
     <View style={styles.screen}>
-      {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Text style={styles.backButtonText}>{'<'} Back</Text>
         </TouchableOpacity>
+
         <View style={styles.headerTitleWrapper}>
           <Text style={styles.headerTitle} numberOfLines={1}>
             {title}
           </Text>
           <Text style={styles.headerSubtitle}>Group chat</Text>
         </View>
+
         <View style={styles.headerRightPlaceholder} />
       </View>
 
       <KeyboardAvoidingView
         style={styles.chatWrapper}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={insets.top + 10}
+        keyboardVerticalOffset={-20} // ✅ FIXED: Changed from insets.top + 10 to 90
       >
-        {/* Messages */}
         <View style={styles.messagesContainer}>
           {!groupId ? (
             <View style={styles.emptyState}>
@@ -300,9 +372,7 @@ const PrivateMessagesScreen = () => {
           ) : messages.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyTitle}>No messages yet</Text>
-              <Text style={styles.emptyText}>
-                Send the first message to your group.
-              </Text>
+              <Text style={styles.emptyText}>Send the first message to your group.</Text>
             </View>
           ) : (
             <FlatList
@@ -314,11 +384,20 @@ const PrivateMessagesScreen = () => {
           )}
         </View>
 
-        {/* Input bar */}
         <View style={[styles.inputBar, { paddingBottom: insets.bottom + 6 }]}>
-          <TouchableOpacity style={styles.mediaButton} onPress={handlePickImage}>
-            <Text style={styles.mediaButtonText}>+</Text>
+          <TouchableOpacity
+            style={styles.mediaButton}
+            onPress={handlePickImage}
+            disabled={uploading}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            {uploading ? (
+              <ActivityIndicator size="small" color="#666" />
+            ) : (
+              <Text style={styles.mediaButtonText}>+</Text>
+            )}
           </TouchableOpacity>
+
           <TextInput
             style={styles.input}
             placeholder="Write a message..."
@@ -326,14 +405,19 @@ const PrivateMessagesScreen = () => {
             value={input}
             onChangeText={setInput}
             multiline
+            editable={!uploading}
           />
-          <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
+
+          <TouchableOpacity 
+            style={styles.sendButton} 
+            onPress={handleSend}
+            disabled={uploading}
+          >
             <Text style={styles.sendButtonText}>Send</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
 
-      {/* Fullscreen galleri */}
       <FullImageModal
         visible={fullImageVisible}
         images={imageUris}

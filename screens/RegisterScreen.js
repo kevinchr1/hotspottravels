@@ -58,9 +58,10 @@ const RegisterScreen = ({ navigation }) => {
       <Text style={styles.title}>Sign up</Text>
       <TextInput
         style={styles.input} // Stil til inputfelt
-        placeholder="Brugernavn" // Pladsholder tekst
+        placeholder="Username" // Pladsholder tekst
         value={username} // Værdi af inputfeltet
         onChangeText={setUsername} // Opdaterer brugernavn state ved ændringer
+        placeholderTextColor="#888"
       />
       <TextInput
         style={styles.input} // Stil til inputfelt
@@ -68,13 +69,15 @@ const RegisterScreen = ({ navigation }) => {
         value={email} // Værdi af inputfeltet
         onChangeText={setEmail} // Opdaterer email state ved ændringer
         keyboardType="email-address" // Tastaturtype til email
+        placeholderTextColor="#888"
       />
       <TextInput
         style={styles.input} // Stil til inputfelt
-        placeholder="Adgangskode" // Pladsholder tekst
+        placeholder="Password" // Pladsholder tekst
         value={password} // Værdi af inputfeltet
         onChangeText={setPassword} // Opdaterer adgangskode state ved ændringer
         secureTextEntry // Gør at adgangskoden vises som prikker
+        placeholderTextColor="#888"
       />
       <BlueButton text="Opret Konto" action={handleRegister} />
 
