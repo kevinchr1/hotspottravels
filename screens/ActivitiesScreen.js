@@ -478,6 +478,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 8,
     backgroundColor: '#F4F4F4',
+    marginTop: 6,
   },
   secondaryButtonText: {
     fontSize: 12,
@@ -486,8 +487,8 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     paddingHorizontal: 10,
-    paddingVertical: 10,      // var 6
-    borderRadius: 10,         // var 8
+    paddingVertical: 6,      // var 6
+    borderRadius: 8,         // var 8
     backgroundColor: ORANGE,
     marginTop: 6,             // ny
   },
