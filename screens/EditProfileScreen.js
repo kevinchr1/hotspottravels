@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, StyleSheet, Alert, Image, TouchableOpacity } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   getAuth,
@@ -33,6 +34,7 @@ import KeyboardScreen from '../components/KeyboardScreen';
 import BlueButton from '../components/BlueButton';
 
 const EditProfileScreen = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
   const [username, setUsername] = useState('');
   const [photoURL, setPhotoURL] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -247,83 +249,103 @@ const EditProfileScreen = ({ navigation }) => {
   };
 
   return (
-    <KeyboardScreen contentContainerStyle={styles.contentContainer}>
-      <View style={styles.card}>
-        <Text style={styles.title}>Edit profile</Text>
-
-        {loading ? (
-          <Text style={styles.loadingText}>Loading...</Text>
-        ) : (
-          <>
-            {/* Profilbillede */}
-            <View style={styles.avatarWrapper}>
-              {photoURL ? (
-                <Image source={{ uri: photoURL }} style={styles.avatarImage} />
-              ) : (
-                <View style={styles.avatarFallback}>
-                  <Text style={styles.avatarFallbackText}>
-                    {username ? username.charAt(0).toUpperCase() : 'U'}
-                  </Text>
-                </View>
-              )}
-
-              <TouchableOpacity onPress={pickAndUploadImage}>
-                <Text style={styles.changePhotoText}>Change profile picture</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Username */}
-            <Text style={styles.sectionTitle}>Profile info</Text>
-            <Text style={styles.label}>Username</Text>
-            <TextInput
-              style={styles.input}
-              value={username}
-              onChangeText={setUsername}
-              placeholder="Your name"
-            />
-            <BlueButton text="Save username" action={saveUsername} />
-
-            {/* Password */}
-            <Text style={[styles.sectionTitle, { marginTop: 30 }]}>Change password</Text>
-
-            <Text style={styles.label}>Current password</Text>
-            <TextInput
-              style={styles.input}
-              value={currentPass}
-              onChangeText={setCurrentPass}
-              placeholder="Current password"
-              secureTextEntry
-            />
-
-            <Text style={styles.label}>New password</Text>
-            <TextInput
-              style={styles.input}
-              value={newPass}
-              onChangeText={setNewPass}
-              placeholder="New password"
-              secureTextEntry
-            />
-
-            <Text style={styles.label}>Confirm new password</Text>
-            <TextInput
-              style={styles.input}
-              value={confirmPass}
-              onChangeText={setConfirmPass}
-              placeholder="Confirm new password"
-              secureTextEntry
-            />
-
-            <BlueButton text="Update password" action={updateUserPassword} />
-
-            {/* Delete account */}
-            <Text style={[styles.sectionTitle, { marginTop: 30 }]}>Danger zone</Text>
-            <TouchableOpacity style={styles.deleteButton} onPress={confirmDeleteAccount}>
-              <Text style={styles.deleteButtonText}>Delete account</Text>
-            </TouchableOpacity>
-          </>
-        )}
+    <View style={[styles.screen, { paddingTop: insets.top }]}>
+      {/* Header (samme vibe som Settings) */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Text style={styles.backText}>{'<'} Back</Text>
+        </TouchableOpacity>
+  
+        <View style={styles.headerCenter}>
+          <Image
+            source={require('../assets/hotspotflame.png')}
+            style={styles.headerLogo}
+          />
+          <Text style={styles.headerTitle}>Edit profile</Text>
+        </View>
+  
+        <View style={styles.headerRightSpacer} />
       </View>
-    </KeyboardScreen>
+  
+      <KeyboardScreen contentContainerStyle={styles.content}>
+        {/* Profile card */}
+        <View style={styles.card}>
+          {loading ? (
+            <Text style={styles.loadingText}>Loading...</Text>
+          ) : (
+            <>
+              <View style={styles.avatarWrapper}>
+                {photoURL ? (
+                  <Image source={{ uri: photoURL }} style={styles.avatarImage} />
+                ) : (
+                  <View style={styles.avatarFallback}>
+                    <Text style={styles.avatarFallbackText}>
+                      {username ? username.charAt(0).toUpperCase() : 'U'}
+                    </Text>
+                  </View>
+                )}
+  
+                <TouchableOpacity onPress={pickAndUploadImage}>
+                  <Text style={styles.changePhotoText}>Change profile picture</Text>
+                </TouchableOpacity>
+              </View>
+  
+              <Text style={styles.sectionTitle}>Profile info</Text>
+              <Text style={styles.label}>Username</Text>
+              <TextInput
+                style={styles.input}
+                value={username}
+                onChangeText={setUsername}
+                placeholder="Your name"
+              />
+              <BlueButton text="Save username" action={saveUsername} />
+            </>
+          )}
+        </View>
+  
+        {/* Password card */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Change password</Text>
+  
+          <Text style={styles.label}>Current password</Text>
+          <TextInput
+            style={styles.input}
+            value={currentPass}
+            onChangeText={setCurrentPass}
+            placeholder="Current password"
+            secureTextEntry
+          />
+  
+          <Text style={styles.label}>New password</Text>
+          <TextInput
+            style={styles.input}
+            value={newPass}
+            onChangeText={setNewPass}
+            placeholder="New password"
+            secureTextEntry
+          />
+  
+          <Text style={styles.label}>Confirm new password</Text>
+          <TextInput
+            style={styles.input}
+            value={confirmPass}
+            onChangeText={setConfirmPass}
+            placeholder="Confirm new password"
+            secureTextEntry
+          />
+  
+          <BlueButton text="Update password" action={updateUserPassword} />
+        </View>
+  
+        {/* Danger zone card */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Danger zone</Text>
+          <TouchableOpacity style={styles.deleteButton} onPress={confirmDeleteAccount}>
+            <Text style={styles.deleteButtonText}>Delete account</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardScreen>
+    </View>
   );
 };
 
@@ -336,11 +358,13 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#fff',
     borderRadius: 16,
-    padding: 20,
+    padding: 14,
+    marginBottom: 0,
     shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
     shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
   title: {
     fontSize: 20,
@@ -416,6 +440,56 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     color: '#cc0000',
     fontWeight: '700',
+  },
+  screen: {
+    flex: 1,
+    backgroundColor: Colors.primary,
+  },
+  header: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: '#FFA500',
+  },
+  backButton: {
+    paddingVertical: 6,
+    paddingRight: 8,
+    width: 70,
+  },
+  backText: {
+    fontSize: 14,
+    color: '#1E3250',
+    fontWeight: '600',
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  headerLogo: {
+    width: 28,
+    height: 28,
+    resizeMode: 'contain',
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1E3250',
+  },
+  headerRightSpacer: {
+    width: 70,
+  },
+  content: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
+    gap: 12,
   },
 });
 

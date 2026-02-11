@@ -315,19 +315,11 @@ const ProfileScreen = ({ navigation }) => {
             label="Edit profile" 
             onPress={() => navigation.navigate('EditProfile')} 
           />
-          <QuickActionButton 
-            label="Notifications" 
-            onPress={() => Alert.alert("Coming soon", "Notification settings will be added later.")} 
-          />
         </View>
         <View style={styles.quickActionsRow}>
           <QuickActionButton 
-            label="App settings" 
-            onPress={() => Alert.alert("Coming soon", "Settings will be added later.")} 
-          />
-          <QuickActionButton 
-            label="Privacy" 
-            onPress={() => Alert.alert("Coming soon", "Privacy options will be added later.")} 
+            label="Settings" 
+            onPress={() => navigation.navigate('Settings')} 
           />
         </View>
       </View>

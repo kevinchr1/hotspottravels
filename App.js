@@ -22,6 +22,8 @@ import ActivitiesScreen from './screens/ActivitiesScreen';
 import ForumScreen from './screens/ForumScreen';
 import PrivateMessagesScreen from './screens/PrivateMessagesScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
+import SettingsScreen from './screens/SettingsScreen';
+import LegalScreen from './screens/LegalScreen';
 
 // Firebase config
 const firebaseConfig = {
@@ -168,6 +170,8 @@ const MainStack = () => (
     <Stack.Screen name="Add Marker" component={Add_edit_marker} />
     <Stack.Screen name="Private messages" component={PrivateMessagesScreen} />
     <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+    <Stack.Screen name="Settings" component={SettingsScreen} />
+    <Stack.Screen name="Legal" component={LegalScreen} />
   </Stack.Navigator>
 );
 
