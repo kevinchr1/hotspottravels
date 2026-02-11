@@ -126,9 +126,8 @@ const EditProfileScreen = ({ navigation }) => {
       const uri = asset.uri;
 
       const storage = getStorage();
-      const fileRef = storageRef(storage, `profilePictures/${user.uid}.jpg`);
-
-      // Convert uri -> blob
+      const ext = (asset?.fileName?.split('.').pop() || 'jpg').toLowerCase();
+      const fileRef = storageRef(storage, `profilePictures/${user.uid}/avatar.jpg`);      // Convert uri -> blob
       const response = await fetch(uri);
       const blob = await response.blob();
 
@@ -224,8 +223,7 @@ const EditProfileScreen = ({ navigation }) => {
       const storage = getStorage();
 
       // Forsøg at slette profilbillede (må gerne fejle stille)
-      const picRef = storageRef(storage, `profilePictures/${uid}.jpg`);
-      try {
+      const picRef = storageRef(storage, `profilePictures/${uid}/avatar.jpg`);      try {
         await deleteObject(picRef);
       } catch (e) {
         // Ignorer hvis filen ikke findes
