@@ -115,6 +115,12 @@ const ActivitiesScreen = ({ navigation }) => {
               const activitiesArray = Object.keys(data).map((key) => ({
                 ...data[key],
                 id: key,
+                latlng: data[key]?.latlng
+                  ? {
+                      latitude: Number(data[key].latlng.latitude),
+                      longitude: Number(data[key].latlng.longitude),
+                    }
+                  : null,
               }));
               setActivities(activitiesArray);
             } else {
@@ -147,17 +153,16 @@ const ActivitiesScreen = ({ navigation }) => {
   };
 
   const handleViewOnMap = (activity) => {
-    Alert.alert(
-      'Coming soon',
-      'Later this button can open the map and zoom to this activity location.'
-    );
+    navigation.navigate('Map', {
+      focusMarker: {
+        markerId: activity.id,
+        latlng: activity.latlng,
+      },
+    });
   };
 
   const handleViewDetails = (activity) => {
-    Alert.alert(
-      'Coming soon',
-      'Later this button can open a detailed activity page.'
-    );
+    navigation.navigate('View_marker', { marker: activity });
   };
 
   return (

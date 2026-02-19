@@ -13,6 +13,7 @@ import Colors from './constants/Colors';
 
 // Screens
 import Map from './screens/map';
+import AdminPanel from "./screens/AdminPanel";
 import Add_edit_marker from './screens/Add_edit_marker';
 import View_marker from './screens/View_marker';
 import LoginScreen from './screens/LoginScreen';
@@ -172,6 +173,7 @@ const MainStack = () => (
     <Stack.Screen name="EditProfile" component={EditProfileScreen} />
     <Stack.Screen name="Settings" component={SettingsScreen} />
     <Stack.Screen name="Legal" component={LegalScreen} />
+    <Stack.Screen name="AdminPanel" component={AdminPanel} />
   </Stack.Navigator>
 );
 

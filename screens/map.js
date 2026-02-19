@@ -29,7 +29,7 @@ import Colors from '../constants/Colors';
 const NAVY = '#1E3250';
 const ORANGE = '#FFA500';
 
-const Map = () => {
+const Map = ({ route }) => {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const mapRef = useRef(null);
@@ -267,6 +267,26 @@ const Map = () => {
       500
     );
   };
+  useEffect(() => {
+    const fm = route?.params?.focusMarker;
+    if (!fm) return;
+  
+    // Hvis vi får markerId, så vent til markers er loaded og find den
+    if (fm.markerId && markerById[fm.markerId]?.latlng) {
+      setSelectedMarkerId(fm.markerId);
+      zoomToCoords(markerById[fm.markerId].latlng);
+      return;
+    }
+  
+    // Hvis vi får coords direkte
+    if (fm.latlng?.latitude && fm.latlng?.longitude) {
+      setSelectedMarkerId(fm.markerId || null);
+      zoomToCoords({
+        latitude: Number(fm.latlng.latitude),
+        longitude: Number(fm.latlng.longitude),
+      });
+    }
+  }, [route?.params?.focusMarker, markerById]);
 
   // My location button
   const handleMyLocation = () => {
@@ -427,16 +447,28 @@ const Map = () => {
                         }}
                       />
 
-                      <Callout onPress={() => navigation.navigate('View_marker', { marker })}>
-                        <View style={styles.callout}>
-                          <Text style={styles.title}>{marker.title}</Text>
-                          <Text style={styles.type}>{marker.type}</Text>
-                          <Text style={styles.description}>{marker.description}</Text>
-                          <View style={styles.button}>
-                            <Text>See more</Text>
-                          </View>
-                        </View>
-                      </Callout>
+<Callout
+  tooltip
+  onPress={() => navigation.navigate('View_marker', { marker })}
+>
+  <View style={styles.calloutWrap}>
+    <View style={styles.calloutCard}>
+      <Text style={styles.calloutTitle} numberOfLines={1}>{marker.title}</Text>
+      <Text style={styles.calloutMeta} numberOfLines={1}>{marker.type}</Text>
+
+      {!!marker.description && (
+        <Text style={styles.calloutDesc} numberOfLines={2}>{marker.description}</Text>
+      )}
+
+      <View style={styles.calloutCta}>
+        <Text style={styles.calloutCtaText}>See more</Text>
+      </View>
+    </View>
+
+    {/* lille “pil” så den stadig peger pænt på markeren */}
+    <View style={styles.calloutArrow} />
+  </View>
+</Callout>
                     </Marker>
                   );
                 })}
@@ -656,6 +688,41 @@ const styles = StyleSheet.create({
     color: '#555',
     textAlign: 'center',
   },
+  calloutWrap: { alignItems: 'center' },
+calloutCard: {
+  width: 240,
+  backgroundColor: '#fff',
+  borderRadius: 16,
+  padding: 12,
+  borderWidth: 1,
+  borderColor: '#EDEDED',
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.12,
+  shadowRadius: 6,
+  elevation: 4,
+},
+calloutTitle: { fontSize: 15, fontWeight: '700', color: NAVY },
+calloutMeta: { marginTop: 4, fontSize: 12, fontWeight: '600', color: ORANGE },
+calloutDesc: { marginTop: 6, fontSize: 12, color: '#4B5563', lineHeight: 16 },
+calloutCta: {
+  marginTop: 10,
+  backgroundColor: ORANGE,
+  borderRadius: 10,
+  paddingVertical: 10,
+  alignItems: 'center',
+},
+calloutCtaText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+calloutArrow: {
+  marginTop: -1,
+  width: 12,
+  height: 12,
+  backgroundColor: '#fff',
+  transform: [{ rotate: '45deg' }],
+  borderRightWidth: 1,
+  borderBottomWidth: 1,
+  borderColor: '#EDEDED',
+},
 });
 
 export default Map;

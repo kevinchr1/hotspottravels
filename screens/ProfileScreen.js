@@ -1,142 +1,161 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  Image, 
-  TextInput, 
-  TouchableOpacity, 
-  Alert 
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  TextInput,
+  TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { getAuth } from 'firebase/auth';
 import { getDatabase, ref, get, update } from 'firebase/database';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '../constants/Colors';
 import KeyboardScreen from '../components/KeyboardScreen';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-/**
- * ProfileScreen viser brugerens profilinformation og gruppestatus.
- * Brugeren kan:
- * - se basis info
- * - join'e en gruppe med en kode
- * - forlade en gruppe (leave group)
- * - gå til EditProfile, osv.
- */
+const NAVY = '#1E3250';
+const ORANGE = '#FFA500';
 
 const ProfileScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const [firebaseUser, setFirebaseUser] = useState(null);
-  const [profileData, setProfileData] = useState(null);
-  const [groupCode, setGroupCode] = useState('');
-  const [currentGroup, setCurrentGroup] = useState(null);  // data for den gruppe brugeren er i
-  const auth = getAuth();
 
-  // Hent bruger + profil + nuværende gruppe
+  const auth = getAuth();
+  const [firebaseUser, setFirebaseUser] = useState(null);
+
+  const [profileData, setProfileData] = useState(null);
+  const [currentGroup, setCurrentGroup] = useState(null);
+
+  const [groupCode, setGroupCode] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Load profile + group + admin claim
   useEffect(() => {
     const user = auth.currentUser;
     setFirebaseUser(user);
-  
+
     if (!user) return;
-  
+
+    let cancelled = false;
+
+    const fetchAdminClaim = async () => {
+      try {
+        // VIGTIG: brug metoden på user (React Native friendly)
+        const tokenResult = await user.getIdTokenResult(true);
+        if (!cancelled) setIsAdmin(tokenResult?.claims?.admin === true);
+      } catch (e) {
+        console.log('Admin claim fetch error:', e);
+        if (!cancelled) setIsAdmin(false);
+      }
+    };
+
     const fetchData = async () => {
       try {
         const db = getDatabase();
         const userRef = ref(db, `users/${user.uid}`);
         const userSnap = await get(userRef);
-  
-        if (userSnap.exists()) {
-          const userData = userSnap.val();
-          setProfileData(userData);
-  
-          // Hvis brugeren har en currentGroupId, hent selve gruppen
-          if (userData.currentGroupId) {
-            const groupRef = ref(db, `groups/${userData.currentGroupId}`);
-            const groupSnap = await get(groupRef);
-  
-            if (groupSnap.exists()) {
+
+        if (!userSnap.exists()) {
+          if (cancelled) return;
+          setProfileData(null);
+          setCurrentGroup(null);
+          return;
+        }
+
+        const userData = userSnap.val();
+        if (cancelled) return;
+
+        setProfileData(userData);
+
+        // Hent current group hvis den findes
+        if (userData.currentGroupId) {
+          const groupRef = ref(db, `groups/${userData.currentGroupId}`);
+          const groupSnap = await get(groupRef);
+
+          if (groupSnap.exists()) {
+            if (!cancelled) {
               setCurrentGroup({
                 id: userData.currentGroupId,
                 ...groupSnap.val(),
               });
             }
+          } else {
+            if (!cancelled) setCurrentGroup(null);
           }
+        } else {
+          if (!cancelled) setCurrentGroup(null);
         }
       } catch (error) {
-        console.log("Error fetching user profile or group:", error);
+        console.log('Error fetching user profile or group:', error);
       }
     };
-  
+
+    fetchAdminClaim();
     fetchData();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Udled visningsnavn, email og evt. profilbillede
   const displayName =
     profileData?.username || firebaseUser?.email?.split('@')[0] || 'Traveler';
   const email = firebaseUser?.email || 'No email';
   const initial = displayName.charAt(0).toUpperCase();
   const photoURL = profileData?.photoURL || firebaseUser?.photoURL || null;
 
-  // Join group med kode
   const handleJoinGroup = async () => {
     const user = auth.currentUser;
-  
+
     if (!user) {
-      Alert.alert("Not logged in", "You need to be logged in to join a group.");
+      Alert.alert('Not logged in', 'You need to be logged in to join a group.');
       return;
     }
-  
-    const code = groupCode.trim().toUpperCase(); // fx "TEST123"
-  
+
+    const code = groupCode.trim().toUpperCase();
     if (!code) {
-      Alert.alert("Missing code", "Please enter a group code.");
+      Alert.alert('Missing code', 'Please enter a group code.');
       return;
     }
-  
+
     try {
       const db = getDatabase();
-  
-      // 1) slå koden op i groupCodes
+
       const codeRef = ref(db, 'groupCodes/' + code);
       const codeSnap = await get(codeRef);
-  
+
       if (!codeSnap.exists()) {
-        Alert.alert("Invalid code", "We couldn't find a group with that code.");
+        Alert.alert('Invalid code', "We couldn't find a group with that code.");
         return;
       }
-  
+
       const { groupId } = codeSnap.val() || {};
-  
       if (!groupId) {
-        Alert.alert("Error", "This code is not linked to any group.");
+        Alert.alert('Error', 'This code is not linked to any group.');
         return;
       }
-  
+
       const uid = user.uid;
       const now = Date.now();
-  
-      // 2) forbered multi-update (skriver flere steder på én gang)
+
       const updates = {};
-  
-      // Brugeren som medlem af gruppen
+
       updates[`groupMembers/${groupId}/${uid}`] = {
-        role: "member",
+        role: 'member',
         joinedAt: now,
       };
-  
-      // Gruppe på brugerens historik
+
       updates[`userGroups/${uid}/${groupId}`] = {
-        role: "member",
-        status: "active",
+        role: 'member',
+        status: 'active',
         joinedAt: now,
       };
-  
-      // Current group på user-profilen
+
       updates[`users/${uid}/currentGroupId`] = groupId;
-  
-      // 3) skriv alt på én gang
+
       await update(ref(db), updates);
 
-      // 4) hent gruppen med det samme og opdater UI
+      // Hent gruppe igen så UI opdaterer
       const groupRef = ref(db, 'groups/' + groupId);
       const groupSnap = await get(groupRef);
       if (groupSnap.exists()) {
@@ -146,93 +165,110 @@ const ProfileScreen = ({ navigation }) => {
         });
       }
 
-      // 5) ryd feltet
-      setGroupCode('');
+      // Opdater lokal profil state så currentGroupId ikke hænger
+      setProfileData((prev) => (prev ? { ...prev, currentGroupId: groupId } : prev));
 
-      Alert.alert("Joined", "You have joined the group!");
+      setGroupCode('');
+      Alert.alert('Joined', 'You have joined the group!');
     } catch (error) {
-      console.log("handleJoinGroup error:", error);
-      Alert.alert("Error", error.message);
+      console.log('handleJoinGroup error:', error);
+      Alert.alert('Error', error.message);
     }
   };
 
-  // Leave group med bekræftelse
   const handleLeaveGroup = () => {
     const user = auth.currentUser;
 
     if (!user || !currentGroup) {
-      Alert.alert("Error", "You are not in a group.");
+      Alert.alert('Error', 'You are not in a group.');
       return;
     }
 
-    Alert.alert(
-      "Leave group",
-      "Are you sure you want to leave this group?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Leave",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const db = getDatabase();
-              const uid = user.uid;
-              const groupId = currentGroup.id;
+    Alert.alert('Leave group', 'Are you sure you want to leave this group?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Leave',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const db = getDatabase();
+            const uid = user.uid;
+            const groupId = currentGroup.id;
 
-              const updates = {};
+            const updates = {};
 
-              // Fjern bruger som medlem af gruppen
-              updates[`groupMembers/${groupId}/${uid}`] = null;
+            updates[`groupMembers/${groupId}/${uid}`] = null;
 
-              // Marker brugerens historik som “left”
-              updates[`userGroups/${uid}/${groupId}`] = {
-                role: "member",
-                status: "left",
-                leftAt: Date.now(),
-              };
+            updates[`userGroups/${uid}/${groupId}`] = {
+              role: 'member',
+              status: 'left',
+              leftAt: Date.now(),
+            };
 
-              // Fjern current group på brugerens profil
-              updates[`users/${uid}/currentGroupId`] = null;
+            updates[`users/${uid}/currentGroupId`] = null;
 
-              await update(ref(db), updates);
+            await update(ref(db), updates);
 
-              // Nulstil UI
-              setCurrentGroup(null);
-              setGroupCode('');
-              setProfileData((prev) =>
-                prev ? { ...prev, currentGroupId: null } : prev
-              );
+            setCurrentGroup(null);
+            setGroupCode('');
+            setProfileData((prev) => (prev ? { ...prev, currentGroupId: null } : prev));
 
-              Alert.alert("Left group", "You have left this group.");
-            } catch (error) {
-              console.log("Leave group error:", error);
-              Alert.alert("Error", error.message);
-            }
-          },
+            Alert.alert('Left group', 'You have left this group.');
+          } catch (error) {
+            console.log('Leave group error:', error);
+            Alert.alert('Error', error.message);
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const handleLogout = async () => {
     try {
       await auth.signOut();
     } catch (error) {
-      Alert.alert("Error", error.message);
+      Alert.alert('Error', error.message);
+    }
+  };
+
+  const refreshAndCheckAdmin = async () => {
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        Alert.alert('Not logged in', 'No user logged in.');
+        return;
+      }
+
+      const tokenResult = await user.getIdTokenResult(true);
+      const adminClaim = tokenResult?.claims?.admin === true;
+
+      setIsAdmin(adminClaim);
+
+      Alert.alert('Admin check', adminClaim ? 'Admin: ON' : 'Not admin');
+      console.log('claims:', tokenResult.claims);
+    } catch (e) {
+      console.log('refreshAndCheckAdmin error:', e);
+      Alert.alert('Error', e.message);
+    }
+  };
+
+  const goToAdminPanel = () => {
+    // Hvis du ikke har lavet AdminPanel route endnu, så undgår vi crash
+    try {
+      navigation.navigate('AdminPanel');
+    } catch (e) {
+      Alert.alert('Missing screen', 'AdminPanel route is not registered yet.');
     }
   };
 
   return (
     <KeyboardScreen contentContainerStyle={[styles.container, { paddingTop: insets.top - 10 }]}>
-      {/* Logo øverst */}
+      {/* Logo */}
       <View style={styles.logoWrapper}>
-        <Image 
-          source={require('../assets/hotspotflame.png')} 
-          style={styles.logoImage} 
-        />
+        <Image source={require('../assets/hotspotflame.png')} style={styles.logoImage} />
       </View>
 
-      {/* Profilkort */}
+      {/* Profile card */}
       <View style={styles.card}>
         <View style={styles.profileRow}>
           {photoURL ? (
@@ -242,6 +278,7 @@ const ProfileScreen = ({ navigation }) => {
               <Text style={styles.avatarText}>{initial}</Text>
             </View>
           )}
+
           <View style={styles.profileTextWrapper}>
             <Text style={styles.username}>{displayName}</Text>
             <Text style={styles.email}>{email}</Text>
@@ -249,33 +286,26 @@ const ProfileScreen = ({ navigation }) => {
         </View>
       </View>
 
-      {/* Hotspot group sektion */}
+      {/* Group section */}
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Your Hotspot group</Text>
 
         {currentGroup ? (
           <>
-            <Text style={styles.mutedText}>
-              You’re currently in:
-            </Text>
+            <Text style={styles.mutedText}>You’re currently in:</Text>
 
             <View style={styles.demoGroupBox}>
-              <Text style={styles.demoGroupTitle}>
-                {currentGroup.city || "Destination"}
-              </Text>
-              <Text style={styles.demoGroupName}>
-                {currentGroup.name || "Hotspot trip"}
-              </Text>
+              <Text style={styles.demoGroupTitle}>{currentGroup.city || 'Destination'}</Text>
+              <Text style={styles.demoGroupName}>{currentGroup.name || 'Hotspot trip'}</Text>
               <Text style={styles.demoGroupMeta}>
                 {currentGroup.startDate && currentGroup.endDate
                   ? `${currentGroup.startDate} → ${currentGroup.endDate}`
-                  : "Dates to be announced"}
+                  : 'Dates to be announced'}
               </Text>
             </View>
 
-            {/* Leave group-knap */}
-            <TouchableOpacity 
-              style={[styles.primaryButton, { backgroundColor: '#D9534F' }]} 
+            <TouchableOpacity
+              style={[styles.primaryButton, { backgroundColor: '#D9534F' }]}
               onPress={handleLeaveGroup}
             >
               <Text style={styles.primaryButtonText}>Leave group</Text>
@@ -283,9 +313,7 @@ const ProfileScreen = ({ navigation }) => {
           </>
         ) : (
           <>
-            <Text style={styles.mutedText}>
-              You are not part of a Hotspot group right now.
-            </Text>
+            <Text style={styles.mutedText}>You are not part of a Hotspot group right now.</Text>
 
             <Text style={styles.label}>Enter group code</Text>
             <TextInput
@@ -310,21 +338,30 @@ const ProfileScreen = ({ navigation }) => {
       {/* Quick actions */}
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Quick actions</Text>
+
         <View style={styles.quickActionsRow}>
-          <QuickActionButton 
-            label="Edit profile" 
-            onPress={() => navigation.navigate('EditProfile')} 
+          <QuickActionButton label="Edit profile" onPress={() => navigation.navigate('EditProfile')} />
+        </View>
+
+        <View style={styles.quickActionsRow}>
+          <QuickActionButton label="Settings" onPress={() => navigation.navigate('Settings')} />
+        </View>
+
+        <View style={styles.quickActionsRow}>
+          <QuickActionButton
+            label={isAdmin ? 'Admin: ON' : 'Admin: check'}
+            onPress={refreshAndCheckAdmin}
           />
         </View>
-        <View style={styles.quickActionsRow}>
-          <QuickActionButton 
-            label="Settings" 
-            onPress={() => navigation.navigate('Settings')} 
-          />
-        </View>
+
+        {isAdmin && (
+          <View style={styles.quickActionsRow}>
+            <QuickActionButton label="Admin panel" onPress={goToAdminPanel} />
+          </View>
+        )}
       </View>
 
-      {/* Logout-knap */}
+      {/* Logout */}
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <Text style={styles.logoutButtonText}>Log out</Text>
       </TouchableOpacity>
@@ -332,9 +369,6 @@ const ProfileScreen = ({ navigation }) => {
   );
 };
 
-/**
- * Lille genbrugskomponent til quick actions knapperne
- */
 const QuickActionButton = ({ label, onPress }) => {
   return (
     <TouchableOpacity style={styles.quickActionButton} onPress={onPress}>
@@ -342,9 +376,6 @@ const QuickActionButton = ({ label, onPress }) => {
     </TouchableOpacity>
   );
 };
-
-const NAVY = '#1E3250';
-const ORANGE = '#FFA500';
 
 const styles = StyleSheet.create({
   container: {

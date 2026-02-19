@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import Colors from '../constants/Colors';
 import RatingCard from '../components/RatingCard';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /**
  * View_marker er en skærm, der viser information om en aktivitet.
@@ -20,6 +21,7 @@ import RatingCard from '../components/RatingCard';
 
 const View_marker = ({ route, navigation }) => {
   const [marker, setMarker] = useState('');
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     setMarker(route.params.marker);
@@ -40,95 +42,99 @@ const View_marker = ({ route, navigation }) => {
     );
   }
 
-  const hasCost = !!marker.cost;
-  const hasRating = marker.rating !== undefined && marker.rating !== null && marker.rating !== '';
 
   return (
-    <SafeAreaView style={styles.screen}>
-      {/* Header med tilbage-knap og titel */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
+    <View style={styles.screen}>
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Text style={styles.backButtonText}>{'<'} Back</Text>
         </TouchableOpacity>
-
-        <View style={styles.headerTitleWrapper}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {marker.title || 'Activity'}
-          </Text>
-          {marker.type ? (
-            <Text style={styles.headerSubtitle} numberOfLines={1}>
-              {marker.type}
-            </Text>
-          ) : null}
-        </View>
-
-        <View style={styles.headerRightPlaceholder} />
+  
+        <Image
+          source={require('../assets/hotspotflame.png')}
+          style={styles.headerLogo}
+        />
+  
+        <View style={{ width: 60 }} />
       </View>
-
+  
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Top-banner / billede */}
+        {/* Banner image */}
         <View style={styles.bannerWrapper}>
           <Image
             source={require('../assets/image.png')}
             style={styles.bannerImage}
           />
-
-          {/* Pris badge – kun hvis cost findes */}
-          {hasCost && (
-            <View style={styles.costBadge}>
-              <Text style={styles.costBadgeText}>{marker.cost}</Text>
-            </View>
-          )}
-
-          {/* Rating – kun hvis rating findes */}
-          {hasRating && (
-            <View style={styles.ratingWrapper}>
-              <RatingCard rating={marker.rating} />
-            </View>
-          )}
         </View>
-
-        {/* Hovedkort med info */}
-        <View style={styles.card}>
-          {/* Titel */}
-          {marker.title ? (
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Title</Text>
-              <Text style={styles.sectionText}>{marker.title}</Text>
-            </View>
-          ) : null}
-
-          {/* Type / kategori */}
-          {marker.type ? (
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Category</Text>
-              <Text style={styles.sectionText}>{marker.type}</Text>
-            </View>
-          ) : null}
-
-          {/* Adresse */}
+  
+        {/* Content (mindre “bokset”, mere luft) */}
+        <View style={styles.content}>
+          <Text style={styles.typeLabel}>{marker.type || 'Activity'}</Text>
+          <Text style={styles.title}>{marker.title || 'Activity'}</Text>
+  
           {marker.address ? (
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Address</Text>
-              <Text style={styles.sectionText}>{marker.address}</Text>
-            </View>
+            <Text style={styles.address}>{marker.address}</Text>
           ) : null}
-
-          {/* Beskrivelse */}
+  
           {marker.description ? (
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Description</Text>
-              <Text style={[styles.sectionText, styles.descriptionText]}>
-                {marker.description}
-              </Text>
+            <Text style={styles.description}>{marker.description}</Text>
+          ) : (
+            <Text style={styles.muted}>No description added yet.</Text>
+          )}
+  
+          {/* Mulighed for flere detaljer senere (viser kun hvis data findes) */}
+          {(marker.duration || marker.meetupPoint || marker.notes) ? (
+            <View style={styles.detailsBlock}>
+              <Text style={styles.detailsTitle}>More details</Text>
+  
+              {!!marker.duration && (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Duration</Text>
+                  <Text style={styles.detailValue}>{marker.duration}</Text>
+                </View>
+              )}
+  
+              {!!marker.meetupPoint && (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Meetup</Text>
+                  <Text style={styles.detailValue}>{marker.meetupPoint}</Text>
+                </View>
+              )}
+  
+              {!!marker.notes && (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Notes</Text>
+                  <Text style={styles.detailValue}>{marker.notes}</Text>
+                </View>
+              )}
             </View>
           ) : null}
+  
+          {/* Buttons */}
+          <View style={styles.buttonsRow}>
+            <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.goBack()}>
+              <Text style={styles.secondaryButtonText}>Back</Text>
+            </TouchableOpacity>
+  
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={() => {
+                // Hvis din Tab hedder "Map" (som du viste), så brug "Map" her:
+                navigation.navigate('Map', {
+                  focusMarker: {
+                    markerId: marker.id,
+                    latlng: marker.latlng,
+                  },
+                });
+              }}
+            >
+              <Text style={styles.primaryButtonText}>View on map</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -152,20 +158,21 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: '#fff',
     paddingHorizontal: 12,
-    paddingTop: 10,
     paddingBottom: 10,
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5E5',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 2,
+    borderBottomColor: ORANGE,
   },
   backButton: {
-    paddingVertical: 4,
-    paddingRight: 8,
+    width: 60,
+    paddingVertical: 6,
   },
   backButtonText: {
     fontSize: 14,
     color: NAVY,
+    fontWeight: '600',
   },
   headerTitleWrapper: {
     flex: 1,
@@ -185,17 +192,27 @@ const styles = StyleSheet.create({
     width: 50, // cirka samme bredde som back-knappen for balance
   },
   scrollContent: {
-    paddingBottom: 24,
+    paddingBottom: 26,
+  },
+  content: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
   },
   bannerWrapper: {
-    width: '100%',
-    height: 220,
+    marginTop: 12,
+    marginHorizontal: 16,
+    borderRadius: 18,
+    overflow: 'hidden',
     backgroundColor: '#fff',
-    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
   },
   bannerImage: {
     width: '100%',
-    height: '100%',
+    height: 210,
     resizeMode: 'cover',
   },
   costBadge: {
@@ -243,6 +260,152 @@ const styles = StyleSheet.create({
   },
   descriptionText: {
     lineHeight: 20,
+  },
+  headerContainer: {
+    backgroundColor: '#fff',
+    paddingTop: 18,
+    paddingBottom: 10,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: ORANGE,
+  },
+  headerLogoImage: {
+    width: 52,
+    height: 52,
+    resizeMode: 'contain',
+  },
+  headerLogo: {
+    width: 34,
+    height: 34,
+    resizeMode: 'contain',
+  },
+  contentWrapper: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 24,
+  },
+  bannerCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  bannerLabel: {
+    fontSize: 12,
+    color: '#888',
+    textTransform: 'uppercase',
+  },
+  bannerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: NAVY,
+    marginTop: 4,
+  },
+  bannerMeta: {
+    fontSize: 13,
+    color: '#666',
+    marginTop: 4,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: NAVY,
+    marginBottom: 8,
+  },
+  bodyText: {
+    fontSize: 14,
+    color: '#444',
+    lineHeight: 20,
+  },
+  mutedText: {
+    fontSize: 13,
+    color: '#777',
+  },
+  buttonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 18,
+  },
+  detailsBlock: {
+    marginTop: 18,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#ECECEC',
+  },
+  detailsTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: NAVY,
+    marginBottom: 10,
+  },
+  detailRow: {
+    marginBottom: 10,
+  },
+  detailLabel: {
+    fontSize: 12,
+    color: '#888',
+    textTransform: 'uppercase',
+    marginBottom: 3,
+  },
+  detailValue: {
+    fontSize: 15,
+    color: NAVY,
+  },
+  secondaryButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#F2F2F2',
+  },
+  secondaryButtonText: {
+    fontSize: 13,
+    color: NAVY,
+    fontWeight: '700',
+  },
+  primaryButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: ORANGE,
+  },
+  primaryButtonText: {
+    fontSize: 13,
+    color: '#fff',
+    fontWeight: '800',
+  },
+  typeLabel: {
+    fontSize: 12,
+    color: '#888',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: NAVY,
+    marginTop: 4,
+  },
+  address: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 6,
+  },
+  description: {
+    fontSize: 15,
+    color: '#3f3f3f',
+    lineHeight: 21,
+    marginTop: 12,
+  },
+  muted: {
+    fontSize: 14,
+    color: '#777',
+    marginTop: 12,
   },
 });
 

@@ -1,6 +1,8 @@
 const { onValueCreated } = require("firebase-functions/v2/database");
 const { initializeApp } = require("firebase-admin/app");
 const { getDatabase } = require("firebase-admin/database");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const admin = require("firebase-admin");
 
 initializeApp();
 
@@ -36,5 +38,93 @@ exports.createGroupCode = onValueCreated(
     }
 
     throw new Error("Could not generate a unique code after multiple attempts.");
+  }
+);
+
+function makeReadableCode(len = 6) {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let out = "";
+  for (let i = 0; i < len; i++) {
+    out += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return out;
+}
+
+async function generateUniqueCode() {
+  const db = getDatabase();
+  for (let i = 0; i < 20; i++) {
+    const code = makeReadableCode();
+    const snap = await db.ref(`groupCodes/${code}`).get();
+    if (!snap.exists()) return code;
+  }
+  throw new Error("Could not generate unique code");
+}
+
+exports.createGroup = onCall(
+  {
+    region: "europe-west1",
+  },
+  async (request) => {
+    const { auth, data } = request;
+
+    if (!auth) {
+      throw new HttpsError("unauthenticated", "Login required.");
+    }
+
+    if (auth.token.admin !== true) {
+      throw new HttpsError("permission-denied", "Admin only.");
+    }
+
+    const name = (data?.name || "").trim();
+    const city = (data?.city || "Copenhagen").trim();
+    const description = (data?.description || "").trim();
+    const startDate = (data?.startDate || "").trim();
+    const endDate = (data?.endDate || "").trim();
+
+    if (!name) {
+      throw new HttpsError("invalid-argument", "Group name required.");
+    }
+
+    const db = getDatabase();
+    const groupId = db.ref("groups").push().key;
+    const code = await generateUniqueCode();
+    const now = Date.now();
+    const uid = auth.uid;
+
+    const updates = {};
+
+    updates[`groups/${groupId}`] = {
+      name,
+      description,
+      city,
+      startDate,
+      endDate,
+      code,
+      createdAt: now,
+      createdBy: uid,
+    };
+
+    updates[`groupCodes/${code}`] = {
+      groupId,
+      createdAt: now,
+      createdBy: uid,
+    };
+
+    updates[`groupMembers/${groupId}/${uid}`] = {
+      role: "admin",
+      joinedAt: now,
+    };
+
+    updates[`userGroups/${uid}/${groupId}`] = {
+      role: "admin",
+      status: "active",
+      joinedAt: now,
+    };
+
+    updates[`users/${uid}/currentGroupId`] = groupId;
+
+    await db.ref().update(updates);
+
+    return { groupId, code };
   }
 );
