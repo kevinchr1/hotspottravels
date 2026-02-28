@@ -25,6 +25,10 @@ import PrivateMessagesScreen from './screens/PrivateMessagesScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import LegalScreen from './screens/LegalScreen';
+import AdminCreateGroup from "./screens/AdminCreateGroup";
+import AdminDestinations from "./screens/AdminDestinations";
+import AdminManageGroups from "./screens/AdminManageGroups";
+import AdminManageDestinations from "./screens/AdminManageDestinations";
 
 // Firebase config
 const firebaseConfig = {
@@ -174,6 +178,10 @@ const MainStack = () => (
     <Stack.Screen name="Settings" component={SettingsScreen} />
     <Stack.Screen name="Legal" component={LegalScreen} />
     <Stack.Screen name="AdminPanel" component={AdminPanel} />
+    <Stack.Screen name="AdminCreateGroup" component={AdminCreateGroup} />
+    <Stack.Screen name="AdminDestinations" component={AdminDestinations} />
+    <Stack.Screen name="AdminManageGroups" component={AdminManageGroups} />
+    <Stack.Screen name="AdminManageDestinations" component={AdminManageDestinations} />
   </Stack.Navigator>
 );
 

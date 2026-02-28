@@ -1,48 +1,12 @@
-const { onValueCreated } = require("firebase-functions/v2/database");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { initializeApp } = require("firebase-admin/app");
 const { getDatabase } = require("firebase-admin/database");
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
-const admin = require("firebase-admin");
 
 initializeApp();
 
-function makeCode() {
-  return Math.random().toString(36).slice(2, 8).toUpperCase();
-}
-
-// SKIFT region til din RTDB location i console (eksempel: europe-west1)
-// database = din instance (står i mailen / console)
-exports.createGroupCode = onValueCreated(
-  {
-    ref: "/groups/{groupId}",
-    region: "europe-west1",
-    database: "hotspot-8eff0-default-rtdb",
-  },
-  async (event) => {
-    const groupId = event.params.groupId;
-    const db = getDatabase();
-
-    for (let i = 0; i < 8; i++) {
-      const code = makeCode();
-      const codeRef = db.ref(`groupCodes/${code}`);
-      const snap = await codeRef.get();
-
-      if (!snap.exists()) {
-        await codeRef.set({
-          groupId,
-          createdAt: Date.now(),
-        });
-        console.log(`Created group code ${code} for group ${groupId}`);
-        return;
-      }
-    }
-
-    throw new Error("Could not generate a unique code after multiple attempts.");
-  }
-);
-
-function makeReadableCode(len = 6) {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+// Brug kun A-Z og 0-9 for “pænne” koder
+function makeCode(len = 6) {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   let out = "";
   for (let i = 0; i < len; i++) {
     out += chars[Math.floor(Math.random() * chars.length)];
@@ -50,49 +14,68 @@ function makeReadableCode(len = 6) {
   return out;
 }
 
-async function generateUniqueCode() {
-  const db = getDatabase();
-  for (let i = 0; i < 20; i++) {
-    const code = makeReadableCode();
-    const snap = await db.ref(`groupCodes/${code}`).get();
-    if (!snap.exists()) return code;
-  }
-  throw new Error("Could not generate unique code");
+function isNonEmptyString(x) {
+  return typeof x === "string" && x.trim().length > 0;
 }
 
 exports.createGroup = onCall(
   {
     region: "europe-west1",
+    // database er optional her, men fint at være eksplicit:
+    database: "hotspot-8eff0-default-rtdb",
   },
   async (request) => {
-    const { auth, data } = request;
-
-    if (!auth) {
-      throw new HttpsError("unauthenticated", "Login required.");
+    // 1) Auth check
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "You must be logged in.");
     }
 
-    if (auth.token.admin !== true) {
-      throw new HttpsError("permission-denied", "Admin only.");
+    // 2) Admin claim check
+    const claims = request.auth.token || {};
+    if (claims.admin !== true) {
+      throw new HttpsError("permission-denied", "Admins only.");
     }
 
-    const name = (data?.name || "").trim();
-    const city = (data?.city || "Copenhagen").trim();
-    const description = (data?.description || "").trim();
-    const startDate = (data?.startDate || "").trim();
-    const endDate = (data?.endDate || "").trim();
+    // 3) Input
+    const data = request.data || {};
+    const name = isNonEmptyString(data.name) ? data.name.trim() : null;
+    const description = isNonEmptyString(data.description) ? data.description.trim() : "";
+    const city = isNonEmptyString(data.city) ? data.city.trim() : null; // fx "Copenhagen" eller "KRAKOW"
+    const startDate = isNonEmptyString(data.startDate) ? data.startDate.trim() : ""; // "YYYY-MM-DD"
+    const endDate = isNonEmptyString(data.endDate) ? data.endDate.trim() : ""; // "YYYY-MM-DD"
 
-    if (!name) {
-      throw new HttpsError("invalid-argument", "Group name required.");
-    }
+    if (!name) throw new HttpsError("invalid-argument", "Missing 'name'.");
+    if (!city) throw new HttpsError("invalid-argument", "Missing 'city'.");
 
     const db = getDatabase();
-    const groupId = db.ref("groups").push().key;
-    const code = await generateUniqueCode();
-    const now = Date.now();
-    const uid = auth.uid;
 
+    // 4) Lav groupId (push key)
+    const groupRef = db.ref("groups").push();
+    const groupId = groupRef.key;
+    if (!groupId) {
+      throw new HttpsError("internal", "Could not generate groupId.");
+    }
+
+    // 5) Find unik kode
+    let code = null;
+    for (let i = 0; i < 20; i++) {
+      const candidate = makeCode(6);
+      const snap = await db.ref(`groupCodes/${candidate}`).get();
+      if (!snap.exists()) {
+        code = candidate;
+        break;
+      }
+    }
+    if (!code) {
+      throw new HttpsError("internal", "Could not generate unique code.");
+    }
+
+    const uid = request.auth.uid;
+
+    // 6) Multi-location update (atomisk)
     const updates = {};
 
+    // Group data (matcher eksisterende struktur)
     updates[`groups/${groupId}`] = {
       name,
       description,
@@ -100,31 +83,33 @@ exports.createGroup = onCall(
       startDate,
       endDate,
       code,
-      createdAt: now,
-      createdBy: uid,
     };
 
+    // Code -> group
     updates[`groupCodes/${code}`] = {
       groupId,
-      createdAt: now,
-      createdBy: uid,
     };
 
+    // Gør creator til host + sæt currentGroup
     updates[`groupMembers/${groupId}/${uid}`] = {
-      role: "admin",
-      joinedAt: now,
+      role: "host",
+      joinedAt: Date.now(),
     };
 
     updates[`userGroups/${uid}/${groupId}`] = {
-      role: "admin",
+      role: "host",
       status: "active",
-      joinedAt: now,
+      joinedAt: Date.now(),
     };
 
     updates[`users/${uid}/currentGroupId`] = groupId;
+    updates[`groupSchedules/${groupId}`] = {};
 
     await db.ref().update(updates);
 
-    return { groupId, code };
+    return {
+      groupId,
+      code,
+    };
   }
 );
