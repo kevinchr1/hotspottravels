@@ -1,11 +1,13 @@
-import React, { useState } from 'react'; // Importerer React og useState hook
+import React, { useEffect, useState } from 'react'; // Importerer React og useState hook
 import {  View, 
   TextInput, 
   StyleSheet, 
   Text, 
-  Button} from 'react-native'; // Importerer nødvendige komponenter fra React Native
+  Button,
+  ActivityIndicator} from 'react-native'; // Importerer nødvendige komponenter fra React Native
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth'; // Importerer Firebase autentificeringsfunktioner
-import { Image } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
+import { Asset } from 'expo-asset';
 import Colors from '../constants/Colors';
 import BlueButton from '../components/BlueButton';
 import KeyboardScreen from '../components/KeyboardScreen';
@@ -21,6 +23,23 @@ const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState(''); // State til email
   const [password, setPassword] = useState(''); // State til adgangskode
   const [error, setError] = useState(null); // State til fejlmeddelelser
+  const [heroReady, setHeroReady] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        await Asset.loadAsync([require('../assets/hotspotlogo.png')]);
+      } catch (_e) {
+        // keep fallback spinner state handling below
+      } finally {
+        if (mounted) setHeroReady(true);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Funktion til at håndtere login
   const handleLogin = () => {
@@ -37,10 +56,19 @@ const LoginScreen = ({ navigation }) => {
   return (
     <KeyboardScreen contentContainerStyle={styles.container}>
 <View style={styles.imageWrapper}>
-  <Image 
-    source={require('../assets/hotspotlogo.png')} 
-    style={styles.image}
-  />
+  {heroReady ? (
+    <ExpoImage
+      source={require('../assets/hotspotlogo.png')}
+      style={styles.image}
+      contentFit="contain"
+      transition={160}
+      cachePolicy="memory-disk"
+    />
+  ) : (
+    <View style={styles.imageLoader}>
+      <ActivityIndicator color="#A3A3A3" />
+    </View>
+  )}
 </View>
 
     {/*<Text style={styles.title}>LOG IND</Text>*/}
@@ -68,7 +96,7 @@ const LoginScreen = ({ navigation }) => {
 
     <View style={styles.spacing} />
 
-    <Text style={{textAlign: 'center'}}>Don't have an account?</Text>
+    <Text style={{textAlign: 'center'}}>Don&apos;t have an account?</Text>
 
     <Button title="Sign up" onPress={() => navigation.navigate('Signup')} /> 
   </KeyboardScreen>
@@ -116,7 +144,12 @@ const styles = StyleSheet.create({
     image: {
       width: 280, 
       height: 280,
-      resizeMode: 'contain',
+    },
+    imageLoader: {
+      width: 280,
+      height: 280,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
   });
 

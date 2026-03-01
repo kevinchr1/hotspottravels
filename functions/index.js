@@ -1,6 +1,7 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { initializeApp } = require("firebase-admin/app");
 const { getDatabase } = require("firebase-admin/database");
+const admin = require("firebase-admin");
 
 initializeApp();
 
@@ -225,6 +226,171 @@ exports.deleteGroupEvent = onCall(
 
     const db = getDatabase();
     await db.ref(`groupSchedules/${groupId}/${eventId}`).remove();
+
+    return { success: true };
+  }
+);
+
+exports.deleteGroup = onCall(
+  {
+    region: "europe-west1",
+    database: "hotspot-8eff0-default-rtdb",
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "You must be logged in.");
+    }
+    if (request.auth.token?.admin !== true) {
+      throw new HttpsError("permission-denied", "Admin only");
+    }
+
+    const data = request.data || {};
+    const groupId = isNonEmptyString(data.groupId) ? data.groupId.trim() : "";
+    if (!groupId) {
+      throw new HttpsError("invalid-argument", "Missing 'groupId'.");
+    }
+
+    const db = getDatabase();
+    const groupRef = db.ref(`groups/${groupId}`);
+    const membersRef = db.ref(`groupMembers/${groupId}`);
+
+    const [groupSnap, membersSnap] = await Promise.all([
+      groupRef.get(),
+      membersRef.get(),
+    ]);
+
+    if (!groupSnap.exists()) {
+      throw new HttpsError("not-found", "Group not found.");
+    }
+
+    const group = groupSnap.val() || {};
+    const code = isNonEmptyString(group.code) ? group.code.trim() : "";
+    const memberUids = membersSnap.exists() ? Object.keys(membersSnap.val() || {}) : [];
+
+    const updates = {
+      [`groups/${groupId}`]: null,
+      [`groupSchedules/${groupId}`]: null,
+      [`groupMembers/${groupId}`]: null,
+    };
+
+    if (code) {
+      updates[`groupCodes/${code}`] = null;
+    }
+
+    for (const uid of memberUids) {
+      updates[`userGroups/${uid}/${groupId}`] = null;
+    }
+
+    if (memberUids.length > 0) {
+      const currentGroupSnaps = await Promise.all(
+        memberUids.map((uid) => db.ref(`users/${uid}/currentGroupId`).get())
+      );
+
+      currentGroupSnaps.forEach((snap, idx) => {
+        if (snap.exists() && snap.val() === groupId) {
+          updates[`users/${memberUids[idx]}/currentGroupId`] = null;
+        }
+      });
+    }
+
+    await db.ref().update(updates);
+    return { success: true, removedMembers: memberUids.length };
+  }
+);
+
+exports.removeGroupMember = onCall(
+  {
+    region: "europe-west1",
+    database: "hotspot-8eff0-default-rtdb",
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "You must be logged in.");
+    }
+    if (request.auth.token?.admin !== true) {
+      throw new HttpsError("permission-denied", "Admin only");
+    }
+
+    const data = request.data || {};
+    const groupId = isNonEmptyString(data.groupId) ? data.groupId.trim() : "";
+    const memberUid = isNonEmptyString(data.memberUid) ? data.memberUid.trim() : "";
+
+    if (!groupId) {
+      throw new HttpsError("invalid-argument", "Missing 'groupId'.");
+    }
+    if (!memberUid) {
+      throw new HttpsError("invalid-argument", "Missing 'memberUid'.");
+    }
+
+    const db = getDatabase();
+    const memberRef = db.ref(`groupMembers/${groupId}/${memberUid}`);
+    const memberSnap = await memberRef.get();
+    if (!memberSnap.exists()) {
+      throw new HttpsError("not-found", "Member not found in group.");
+    }
+
+    const member = memberSnap.val() || {};
+    if (member.role === "host") {
+      throw new HttpsError("failed-precondition", "Host cannot be removed.");
+    }
+
+    const updates = {
+      [`groupMembers/${groupId}/${memberUid}`]: null,
+      [`userGroups/${memberUid}/${groupId}`]: null,
+    };
+
+    const currentGroupSnap = await db.ref(`users/${memberUid}/currentGroupId`).get();
+    if (currentGroupSnap.exists() && currentGroupSnap.val() === groupId) {
+      updates[`users/${memberUid}/currentGroupId`] = null;
+    }
+
+    await db.ref().update(updates);
+    return { success: true };
+  }
+);
+
+exports.createUserReport = onCall(
+  {
+    region: "europe-west1",
+    database: "hotspot-8eff0-default-rtdb",
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "You must be logged in.");
+    }
+
+    const reporterUid = request.auth.uid;
+    const data = request.data || {};
+    const reportedUid = typeof data.reportedUid === "string" ? data.reportedUid.trim() : "";
+    const reason = typeof data.reason === "string" ? data.reason.trim() : "";
+    const descriptionRaw = data.description;
+
+    if (!reportedUid) {
+      throw new HttpsError("invalid-argument", "Invalid reported user.");
+    }
+    if (reporterUid === reportedUid) {
+      throw new HttpsError("failed-precondition", "You cannot report yourself.");
+    }
+    if (!reason) {
+      throw new HttpsError("invalid-argument", "Reason is required.");
+    }
+    if (
+      typeof descriptionRaw !== "undefined" &&
+      descriptionRaw !== null &&
+      typeof descriptionRaw !== "string"
+    ) {
+      throw new HttpsError("invalid-argument", "Description must be a string.");
+    }
+
+    const reportRef = admin.database().ref("reports").push();
+    await reportRef.set({
+      reporterUid,
+      reportedUid,
+      reason,
+      description: typeof descriptionRaw === "string" ? descriptionRaw.trim() : "",
+      createdAt: Date.now(),
+      status: "open",
+    });
 
     return { success: true };
   }

@@ -190,6 +190,13 @@ export default function AdminPanel({ navigation }) {
             >
               <Text style={styles.secondaryButtonText}>Manage destinations / locations</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => navigation.navigate("AdminReports")}
+            >
+              <Text style={styles.secondaryButtonText}>Manage user reports</Text>
+            </TouchableOpacity>
           </View>
   
          

@@ -1,9 +1,10 @@
-import React, { useState } from 'react'; // Importerer React og useState hook
-import { View, TextInput, Button, StyleSheet, Alert, Text } from 'react-native'; // Importerer nødvendige komponenter fra React Native
+import React, { useEffect, useState } from 'react'; // Importerer React og useState hook
+import { View, TextInput, Button, StyleSheet, Alert, Text, ActivityIndicator } from 'react-native'; // Importerer nødvendige komponenter fra React Native
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth'; // Importerer Firebase autentificering
 import { getDatabase, ref, set } from 'firebase/database'; // Importerer Firebase database funktioner
 import Colors from '../constants/Colors';
-import { Image } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
+import { Asset } from 'expo-asset';
 import BlueButton from '../components/BlueButton';
 import KeyboardScreen from '../components/KeyboardScreen';
 
@@ -20,6 +21,23 @@ const RegisterScreen = ({ navigation }) => {
   const [username, setUsername] = useState(''); // Brugernavn state
   const [email, setEmail] = useState(''); // Email state
   const [password, setPassword] = useState(''); // Adgangskode state
+  const [heroReady, setHeroReady] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        await Asset.loadAsync([require('../assets/hotspotflame.png')]);
+      } catch (_e) {
+        // ignore and continue with ready state
+      } finally {
+        if (mounted) setHeroReady(true);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Funktion til at håndtere registrering af bruger
   const handleRegister = async () => {
@@ -49,11 +67,20 @@ const RegisterScreen = ({ navigation }) => {
   return (
     <KeyboardScreen contentContainerStyle={styles.container}>
     <View style={styles.container}>
-    <View style={styles.imageWrapper}>
-  <Image 
-    source={require('../assets/hotspotflame.png')}
-    style={styles.image}
-  />
+<View style={styles.imageWrapper}>
+  {heroReady ? (
+    <ExpoImage
+      source={require('../assets/hotspotflame.png')}
+      style={styles.image}
+      contentFit="contain"
+      transition={160}
+      cachePolicy="memory-disk"
+    />
+  ) : (
+    <View style={styles.imageLoader}>
+      <ActivityIndicator color="#A3A3A3" />
+    </View>
+  )}
 </View>
       <Text style={styles.title}>Sign up</Text>
       <TextInput
@@ -126,7 +153,12 @@ const styles = StyleSheet.create({
     image: {
       width: 260,
       height: 260,
-      resizeMode: 'contain',    // Forhindrer cropping top/bund
+    },
+    imageLoader: {
+      width: 260,
+      height: 260,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
   });
 

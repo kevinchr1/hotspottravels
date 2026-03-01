@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import MapView, { Marker, Callout } from 'react-native-maps';
 import * as Location from 'expo-location';
+import { Image as ExpoImage } from 'expo-image';
 import { getDatabase, ref, onValue, off, get } from 'firebase/database';
 import { getAuth } from 'firebase/auth';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -28,6 +29,7 @@ import Colors from '../constants/Colors';
 
 const NAVY = '#1E3250';
 const ORANGE = '#FFA500';
+const IMAGE_FALLBACK_BG = '#F3F4F6';
 
 const Map = ({ route }) => {
   const navigation = useNavigation();
@@ -221,6 +223,20 @@ const Map = ({ route }) => {
     const upcoming = scheduleEvents.find((e) => e.startAt > now);
     return upcoming || null;
   }, [scheduleEvents]);
+
+  // Warm remote thumbnails so callouts appear smoother.
+  useEffect(() => {
+    const urls = [
+      ...new Set(
+        markers
+          .map((marker) => marker?.imageUrl)
+          .filter((url) => typeof url === 'string' && url.startsWith('http'))
+      ),
+    ].slice(0, 20);
+
+    if (!urls.length) return;
+    Promise.all(urls.map((url) => ExpoImage.prefetch(url))).catch(() => {});
+  }, [markers]);
 
   // Determine which marker to show in banner:
   // - If user has clicked a marker -> show that marker
@@ -448,19 +464,21 @@ const Map = ({ route }) => {
                       key={marker.id}
                       coordinate={marker.latlng}
                       anchor={{ x: 0.5, y: 1 }}
+                      centerOffset={{ x: 0, y: -18 }}
                       onPress={() => {
                         setSelectedMarkerId(marker.id);
                         zoomToCoords(marker.latlng);
                       }}
                     >
-                      <Image
-                        source={require('../assets/hotspotflame.png')}
-                        style={{
-                          width: isSelected ? 30 : 25,
-                          height: isSelected ? 42 : 35,
-                          resizeMode: 'contain',
-                        }}
-                      />
+                      <View style={styles.markerIconWrap}>
+                        <Image
+                          source={require('../assets/hotspotflame.png')}
+                          style={[
+                            styles.markerIcon,
+                            isSelected && styles.markerIconSelected,
+                          ]}
+                        />
+                      </View>
 
 <Callout
   tooltip
@@ -468,6 +486,19 @@ const Map = ({ route }) => {
 >
   <View style={styles.calloutWrap}>
     <View style={styles.calloutCard}>
+      {marker.imageUrl ? (
+        <ExpoImage
+          source={{ uri: marker.imageUrl }}
+          style={styles.calloutThumb}
+          contentFit="cover"
+          transition={120}
+          cachePolicy="memory-disk"
+        />
+      ) : (
+        <View style={styles.calloutThumbPlaceholder}>
+          <Text style={styles.calloutThumbPlaceholderText}>No image</Text>
+        </View>
+      )}
       <Text style={styles.calloutTitle} numberOfLines={1}>{marker.title}</Text>
       <Text style={styles.calloutMeta} numberOfLines={1}>{marker.type}</Text>
 
@@ -672,6 +703,21 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
   },
+  markerIconWrap: {
+    width: 36,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  markerIcon: {
+    width: 25,
+    height: 35,
+    resizeMode: 'contain',
+  },
+  markerIconSelected: {
+    width: 30,
+    height: 42,
+  },
   callout: {
     width: 200,
   },
@@ -717,6 +763,23 @@ calloutCard: {
   shadowRadius: 6,
   elevation: 4,
 },
+calloutThumb: {
+  width: '100%',
+  height: 108,
+  borderRadius: 10,
+  marginBottom: 10,
+  backgroundColor: IMAGE_FALLBACK_BG,
+},
+calloutThumbPlaceholder: {
+  width: '100%',
+  height: 108,
+  borderRadius: 10,
+  marginBottom: 10,
+  backgroundColor: IMAGE_FALLBACK_BG,
+  alignItems: 'center',
+  justifyContent: 'center',
+},
+calloutThumbPlaceholderText: { fontSize: 11, color: '#8B94A3', fontWeight: '600' },
 calloutTitle: { fontSize: 15, fontWeight: '700', color: NAVY },
 calloutMeta: { marginTop: 4, fontSize: 12, fontWeight: '600', color: ORANGE },
 calloutDesc: { marginTop: 6, fontSize: 12, color: '#4B5563', lineHeight: 16 },

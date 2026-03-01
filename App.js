@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Image, View } from 'react-native';
+import { StyleSheet, Image, View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Asset } from 'expo-asset';
 
 import { getApps, initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
@@ -30,6 +31,8 @@ import AdminDestinations from "./screens/AdminDestinations";
 import AdminManageGroups from "./screens/AdminManageGroups";
 import AdminManageDestinations from "./screens/AdminManageDestinations";
 import ManageGroupDetails from "./screens/ManageGroupDetails";
+import OtherUserProfile from "./screens/OtherUserProfile";
+import AdminReportsScreen from "./screens/AdminReportsScreen";
 
 // Firebase config
 const firebaseConfig = {
@@ -53,6 +56,18 @@ const Tab = createBottomTabNavigator();
 
 const NAVY = '#1E3250';
 const ORANGE_DARK = '#E69500';
+const TAB_MAP_ICON = require('./assets/maplogo.png');
+const TAB_ACTIVITIES_ICON = require('./assets/activitylogo.png');
+const TAB_CHAT_ICON = require('./assets/chatlogo.png');
+const TAB_PROFILE_ICON = require('./assets/userlogo.png');
+const APP_ASSETS = [
+  TAB_MAP_ICON,
+  TAB_ACTIVITIES_ICON,
+  TAB_CHAT_ICON,
+  TAB_PROFILE_ICON,
+  require('./assets/hotspotflame.png'),
+  require('./assets/hotspotlogo.png'),
+];
 
 /* ---------- TAB ICON COMPONENT ---------- */
 const TabItem = ({ focused, source, size }) => {
@@ -117,7 +132,7 @@ const AppTabs = () => (
         tabBarIcon: ({ focused }) => (
           <TabItem
             focused={focused}
-            source={require('./assets/maplogo.png')}
+            source={TAB_MAP_ICON}
             size={45}
           />
         ),
@@ -131,7 +146,7 @@ const AppTabs = () => (
         tabBarIcon: ({ focused }) => (
           <TabItem
             focused={focused}
-            source={require('./assets/activitylogo.png')}
+            source={TAB_ACTIVITIES_ICON}
             size={36}
           />
         ),
@@ -145,7 +160,7 @@ const AppTabs = () => (
         tabBarIcon: ({ focused }) => (
           <TabItem
             focused={focused}
-            source={require('./assets/chatlogo.png')}
+            source={TAB_CHAT_ICON}
             size={36}
           />
         ),
@@ -159,7 +174,7 @@ const AppTabs = () => (
         tabBarIcon: ({ focused }) => (
           <TabItem
             focused={focused}
-            source={require('./assets/userlogo.png')}
+            source={TAB_PROFILE_ICON}
             size={45}
           />
         ),
@@ -183,19 +198,52 @@ const MainStack = () => (
     <Stack.Screen name="AdminDestinations" component={AdminDestinations} />
     <Stack.Screen name="AdminManageGroups" component={AdminManageGroups} />
     <Stack.Screen name="AdminManageDestinations" component={AdminManageDestinations} />
+    <Stack.Screen name="AdminReports" component={AdminReportsScreen} />
     <Stack.Screen name="ManageGroupDetails" component={ManageGroupDetails} />
+    <Stack.Screen name="OtherUserProfile" component={OtherUserProfile} />
   </Stack.Navigator>
 );
 
 /* ---------- APP ROOT ---------- */
 export default function App() {
   const [user, setUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [assetsReady, setAssetsReady] = useState(false);
 
   useEffect(() => {
     const auth = getAuth();
-    const unsubscribe = onAuthStateChanged(auth, setUser);
+    const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
+      setUser(nextUser);
+      setAuthReady(true);
+    });
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        await Asset.loadAsync(APP_ASSETS);
+      } catch (_e) {
+        // If preload fails, continue app boot and load lazily.
+      } finally {
+        if (mounted) setAssetsReady(true);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  if (!authReady || !assetsReady) {
+    return (
+      <SafeAreaProvider>
+        <View style={styles.bootScreen}>
+          <ActivityIndicator color={ORANGE_DARK} />
+        </View>
+      </SafeAreaProvider>
+    );
+  }
 
   return (
     <SafeAreaProvider>
@@ -206,4 +254,11 @@ export default function App() {
   );
 }
 
-const styles = StyleSheet.create({});
+const styles = StyleSheet.create({
+  bootScreen: {
+    flex: 1,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

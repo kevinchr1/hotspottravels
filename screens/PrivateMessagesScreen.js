@@ -1,5 +1,4 @@
-// screens/PrivateMessagesScreen.js
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -10,27 +9,27 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation, useRoute } from '@react-navigation/native';
-import Colors from '../constants/Colors';
-import * as ImagePicker from 'expo-image-picker';
-import { Image as RNImage } from 'react-native';
-import FullImageModal from '../components/FullImageModal';
-import * as ImageManipulator from 'expo-image-manipulator';
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import * as ImagePicker from "expo-image-picker";
+import * as ImageManipulator from "expo-image-manipulator";
+import { Image as ExpoImage } from "expo-image";
 
-import { getAuth } from 'firebase/auth';
-import { getDatabase, ref, onValue, off, push } from 'firebase/database';
+import Colors from "../constants/Colors";
+import FullImageModal from "../components/FullImageModal";
+import { getAuth } from "firebase/auth";
+import { getDatabase, ref, onValue, off, push } from "firebase/database";
 import {
   getStorage,
   ref as storageRef,
   uploadBytes,
   getDownloadURL,
-} from 'firebase/storage';
+} from "firebase/storage";
 
-const NAVY = '#1E3250';
-const ORANGE = '#FFA500';
-const DARK_ORANGE = '#CC7A00';
+const NAVY = "#1E3250";
+const ORANGE = "#FFA500";
+const DARK_ORANGE = "#CC7A00";
 
 const PrivateMessagesScreen = () => {
   const insets = useSafeAreaInsets();
@@ -39,30 +38,30 @@ const PrivateMessagesScreen = () => {
   const auth = getAuth();
 
   const { groupId, groupName } = route.params || {};
-  const title = groupName || 'Group chat';
+  const title = groupName || "Group chat";
 
   const [fullImageVisible, setFullImageVisible] = useState(false);
   const [fullImageStartIndex, setFullImageStartIndex] = useState(0);
 
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
-  const [username, setUsername] = useState('You');
+  const [input, setInput] = useState("");
+  const [username, setUsername] = useState("You");
   const [uploading, setUploading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
 
-  // Fetch username for current user (live)
   useEffect(() => {
     const user = auth.currentUser;
     if (!user) return;
 
     const db = getDatabase();
-    const userRef = ref(db, 'users/' + user.uid);
+    const userRef = ref(db, "users/" + user.uid);
 
     const unsubscribe = onValue(userRef, (snap) => {
       const data = snap.val();
-      if (data && data.username) {
+      if (data?.username) {
         setUsername(data.username);
       } else if (user.email) {
-        setUsername(user.email.split('@')[0]);
+        setUsername(user.email.split("@")[0]);
       }
     });
 
@@ -70,11 +69,13 @@ const PrivateMessagesScreen = () => {
       off(userRef);
       unsubscribe();
     };
-  }, []);
+  }, [auth.currentUser]);
 
-  // Listen live on groupMessages/{groupId}
   useEffect(() => {
-    if (!groupId) return;
+    if (!groupId) {
+      setInitialLoading(false);
+      return;
+    }
 
     const db = getDatabase();
     const msgsRef = ref(db, `groupMessages/${groupId}`);
@@ -85,6 +86,7 @@ const PrivateMessagesScreen = () => {
 
       if (!data) {
         setMessages([]);
+        setInitialLoading(false);
         return;
       }
 
@@ -93,46 +95,57 @@ const PrivateMessagesScreen = () => {
           const m = data[key];
           const mine = user && m.userId === user.uid;
 
-          let time = '';
+          let time = "";
           if (m.createdAt) {
             const d = new Date(m.createdAt);
-            const hh = d.getHours().toString().padStart(2, '0');
-            const mm = d.getMinutes().toString().padStart(2, '0');
+            const hh = d.getHours().toString().padStart(2, "0");
+            const mm = d.getMinutes().toString().padStart(2, "0");
             time = `${hh}:${mm}`;
           }
 
           return {
             id: key,
-            text: m.text || '',
+            text: m.text || "",
             imageUrl: m.imageUrl || null,
+            userId: m.userId || "",
             isMe: mine,
-            time: time || 'Now',
-            author: m.userName || 'Traveler',
+            time: time || "Now",
+            author: m.userName || "Traveler",
             createdAt: m.createdAt || 0,
           };
         })
         .sort((a, b) => a.createdAt - b.createdAt);
 
       setMessages(list);
+      setInitialLoading(false);
     });
 
     return () => {
       off(msgsRef);
       unsubscribe();
     };
-  }, [groupId]);
+  }, [groupId, auth.currentUser]);
 
   const imageMessages = messages.filter((m) => m.imageUrl);
   const imageUris = imageMessages.map((m) => m.imageUrl);
 
+  useEffect(() => {
+    const urls = imageUris
+      .filter((u) => typeof u === "string" && u.startsWith("http"))
+      .slice(0, 15);
+    if (urls.length) {
+      ExpoImage.prefetch(urls).catch(() => {});
+    }
+  }, [imageUris]);
+
   const handleSend = async () => {
     const user = auth.currentUser;
     if (!user) {
-      alert('You must be logged in to send messages.');
+      alert("You must be logged in to send messages.");
       return;
     }
     if (!groupId) {
-      alert('No group selected.');
+      alert("No group selected.");
       return;
     }
 
@@ -142,7 +155,6 @@ const PrivateMessagesScreen = () => {
     try {
       const db = getDatabase();
       const msgsRef = ref(db, `groupMessages/${groupId}`);
-
       await push(msgsRef, {
         text,
         imageUrl: null,
@@ -150,145 +162,105 @@ const PrivateMessagesScreen = () => {
         userName: username,
         createdAt: Date.now(),
       });
-
-      setInput('');
+      setInput("");
     } catch (err) {
-      console.log('Error sending message:', err);
-      alert('Could not send message.');
+      console.log("Error sending message:", err);
+      alert("Could not send message.");
     }
   };
 
-  const uploadImageAsync = async (uri, groupId) => {
+  const uploadImageAsync = async (uri, currentGroupId) => {
     const user = auth.currentUser;
-    if (!user) throw new Error('Not logged in');
-    if (!groupId) throw new Error('No groupId');
+    if (!user) throw new Error("Not logged in");
+    if (!currentGroupId) throw new Error("No groupId");
 
     const storage = getStorage();
-
     const fileName = `${Date.now()}_${Math.random().toString(16).slice(2)}.jpg`;
-    const path = `chatImages/${groupId}/${user.uid}/${fileName}`;
+    const path = `chatImages/${currentGroupId}/${user.uid}/${fileName}`;
     const imgRef = storageRef(storage, path);
 
     const response = await fetch(uri);
     if (!response.ok) {
       throw new Error(`Failed to fetch image: ${response.status}`);
     }
-
     const blob = await response.blob();
-    console.log('Blob size:', blob.size, 'Type:', blob.type);
-
-    const metadata = {
-      contentType: 'image/jpeg',
-    };
-
-    await uploadBytes(imgRef, blob, metadata);
-    const downloadUrl = await getDownloadURL(imgRef);
-
-    return downloadUrl;
+    await uploadBytes(imgRef, blob, { contentType: "image/jpeg" });
+    return getDownloadURL(imgRef);
   };
 
-  // NEW: Handle multiple images
   const handlePickImage = async () => {
-    console.log('handlePickImage START');
-
     try {
       const user = auth.currentUser;
       if (!user) {
-        console.log('handlePickImage: no user');
-        alert('You must be logged in to send images.');
+        alert("You must be logged in to send images.");
         return;
       }
       if (!groupId) {
-        console.log('handlePickImage: no groupId');
-        alert('No group selected.');
+        alert("No group selected.");
         return;
       }
 
-      console.log('Requesting media library permission...');
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      console.log('Permission result:', permission);
-
       if (!permission.granted) {
-        alert('You need to allow gallery permissions.');
+        alert("You need to allow gallery permissions.");
         return;
       }
-
-      console.log('Opening image library...');
-
-      const mediaTypeImages = ImagePicker?.MediaType?.Images ?? ImagePicker?.MediaTypeOptions?.Images;
-      console.log('Using image picker mediaTypeImages:', mediaTypeImages);
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: mediaTypeImages,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.8,
-        allowsMultipleSelection: true, // ✅ NEW: Allow multiple images
+        allowsMultipleSelection: true,
       });
-      console.log('Picker result:', result);
-
       if (result.canceled) return;
 
       const selectedAssets = result.assets || [];
-      if (selectedAssets.length === 0) {
-        alert('No images selected.');
+      if (!selectedAssets.length) {
+        alert("No images selected.");
         return;
       }
 
-      console.log(`Selected ${selectedAssets.length} image(s)`);
       setUploading(true);
-
       const db = getDatabase();
       const msgsRef = ref(db, `groupMessages/${groupId}`);
 
-      // ✅ NEW: Loop through all selected images
       for (let i = 0; i < selectedAssets.length; i++) {
         const asset = selectedAssets[i];
-        const uri = asset.uri;
-
-        console.log(`Processing image ${i + 1}/${selectedAssets.length}: ${uri}`);
-
-        // Convert to JPEG
-        console.log('Converting image to JPEG...');
         const manipResult = await ImageManipulator.manipulateAsync(
-          uri,
+          asset.uri,
           [],
           { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
         );
-        console.log('Converted uri:', manipResult.uri);
 
-        // Upload to Firebase Storage
-        console.log('Uploading to Storage...');
         const downloadUrl = await uploadImageAsync(manipResult.uri, groupId);
-        console.log('Upload done. downloadUrl:', downloadUrl);
-
-        // Save message with download URL
         await push(msgsRef, {
-          text: '',
+          text: "",
           imageUrl: downloadUrl,
           userId: user.uid,
           userName: username,
-          createdAt: Date.now() + i, // Add small offset so they stay in order
+          createdAt: Date.now() + i,
         });
-
-        console.log(`Image ${i + 1} saved to DB`);
       }
-
-      setUploading(false);
-      console.log('All images uploaded successfully!');
     } catch (err) {
+      console.log("handlePickImage error:", err);
+      alert("Could not pick/upload image: " + err.message);
+    } finally {
       setUploading(false);
-      console.log('handlePickImage ERROR (FULL):', err);
-      console.log('Upload error code:', err?.code);
-      console.log('Upload error message:', err?.message);
-      alert('Could not pick/upload image: ' + err.message);
     }
   };
 
   const renderMessage = ({ item, index }) => {
     const previous = index > 0 ? messages[index - 1] : null;
-    const sameAuthorAsPrev = previous && previous.author === item.author;
-    const showAuthor = !sameAuthorAsPrev;
-
+    const showAuthor = !(previous && previous.author === item.author);
     const isMe = item.isMe;
+    const canOpenProfile = !!item.author && !!item.userId && !isMe;
+
+    const handleOpenProfile = () => {
+      if (!canOpenProfile) return;
+      navigation.navigate("OtherUserProfile", {
+        userId: item.userId,
+        userName: item.author,
+      });
+    };
 
     return (
       <View
@@ -298,17 +270,22 @@ const PrivateMessagesScreen = () => {
         ]}
       >
         {!isMe && (
-          <View style={styles.avatarContainer}>
+          <TouchableOpacity style={styles.avatarContainer} onPress={handleOpenProfile}>
             <Text style={styles.avatarInitial}>
-              {(item.author || '?').charAt(0).toUpperCase()}
+              {(item.author || "?").charAt(0).toUpperCase()}
             </Text>
-          </View>
+          </TouchableOpacity>
         )}
 
-        <View style={[styles.messageContent, isMe && { alignItems: 'flex-end' }]}>
-          {showAuthor && (
-            <Text style={styles.authorText}>{item.author || 'Unknown'}</Text>
-          )}
+        <View style={[styles.messageContent, isMe && { alignItems: "flex-end" }]}>
+          {showAuthor &&
+            (canOpenProfile ? (
+              <TouchableOpacity onPress={handleOpenProfile}>
+                <Text style={styles.authorText}>{item.author || "Unknown"}</Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={styles.authorText}>{item.author || "Unknown"}</Text>
+            ))}
 
           <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleOther]}>
             {item.imageUrl ? (
@@ -320,10 +297,12 @@ const PrivateMessagesScreen = () => {
                   setFullImageVisible(true);
                 }}
               >
-                <RNImage
-                  source={{ uri: item.imageUrl }}
+                <ExpoImage
+                  source={item.imageUrl}
                   style={styles.imageInBubble}
-                  resizeMode="cover"
+                  contentFit="cover"
+                  transition={150}
+                  cachePolicy="memory-disk"
                 />
               </TouchableOpacity>
             ) : (
@@ -343,7 +322,7 @@ const PrivateMessagesScreen = () => {
     <View style={styles.screen}>
       <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.backButtonText}>{'<'} Back</Text>
+          <Text style={styles.backButtonText}>{"<"} Back</Text>
         </TouchableOpacity>
 
         <View style={styles.headerTitleWrapper}>
@@ -358,16 +337,19 @@ const PrivateMessagesScreen = () => {
 
       <KeyboardAvoidingView
         style={styles.chatWrapper}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={-20} // ✅ FIXED: Changed from insets.top + 10 to 90
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={-20}
       >
         <View style={styles.messagesContainer}>
           {!groupId ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyTitle}>No group selected</Text>
-              <Text style={styles.emptyText}>
-                Go back to Messages and open a group chat.
-              </Text>
+              <Text style={styles.emptyText}>Go back to Messages and open a group chat.</Text>
+            </View>
+          ) : initialLoading ? (
+            <View style={styles.emptyState}>
+              <ActivityIndicator size="small" color={ORANGE} />
+              <Text style={styles.emptyText}>Loading messages...</Text>
             </View>
           ) : messages.length === 0 ? (
             <View style={styles.emptyState}>
@@ -408,11 +390,7 @@ const PrivateMessagesScreen = () => {
             editable={!uploading}
           />
 
-          <TouchableOpacity 
-            style={styles.sendButton} 
-            onPress={handleSend}
-            disabled={uploading}
-          >
+          <TouchableOpacity style={styles.sendButton} onPress={handleSend} disabled={uploading}>
             <Text style={styles.sendButtonText}>Send</Text>
           </TouchableOpacity>
         </View>
@@ -434,13 +412,13 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
   },
   header: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     paddingHorizontal: 12,
     paddingBottom: 10,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+    flexDirection: "row",
+    alignItems: "flex-end",
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E5E5',
+    borderBottomColor: "#E5E5E5",
   },
   backButton: {
     paddingVertical: 4,
@@ -452,16 +430,16 @@ const styles = StyleSheet.create({
   },
   headerTitleWrapper: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: "center",
   },
   headerTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
     color: NAVY,
   },
   headerSubtitle: {
     fontSize: 12,
-    color: '#888',
+    color: "#888",
     marginTop: 2,
   },
   headerRightPlaceholder: {
@@ -479,46 +457,41 @@ const styles = StyleSheet.create({
   messagesContent: {
     paddingBottom: 8,
   },
-
   messageRow: {
-    width: '100%',
-    flexDirection: 'row',
+    width: "100%",
+    flexDirection: "row",
     marginVertical: 4,
   },
   messageRowLeft: {
-    justifyContent: 'flex-start',
+    justifyContent: "flex-start",
   },
   messageRowRight: {
-    justifyContent: 'flex-end',
+    justifyContent: "flex-end",
   },
-
   avatarContainer: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#FFD9A3',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#FFD9A3",
+    alignItems: "center",
+    justifyContent: "center",
     marginRight: 6,
     marginTop: 18,
   },
   avatarInitial: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: "700",
     color: DARK_ORANGE,
   },
-
   messageContent: {
-    maxWidth: '80%',
+    maxWidth: "80%",
   },
-
   authorText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
     color: DARK_ORANGE,
     marginBottom: 4,
   },
-
   bubble: {
     borderRadius: 16,
     paddingHorizontal: 10,
@@ -529,11 +502,11 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 4,
   },
   bubbleOther: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
     borderBottomLeftRadius: 4,
   },
   bubbleTextMe: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 14,
   },
   bubbleTextOther: {
@@ -545,52 +518,51 @@ const styles = StyleSheet.create({
     height: 180,
     borderRadius: 12,
     marginBottom: 6,
-    backgroundColor: '#eee',
+    backgroundColor: "#eee",
   },
   timeText: {
     fontSize: 10,
-    color: '#EEE',
+    color: "#EEE",
     marginTop: 3,
-    textAlign: 'right',
+    textAlign: "right",
   },
-
   emptyState: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 32,
+    gap: 8,
   },
   emptyTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
     color: NAVY,
     marginBottom: 4,
   },
   emptyText: {
     fontSize: 13,
-    color: '#666',
-    textAlign: 'center',
+    color: "#666",
+    textAlign: "center",
   },
-
   inputBar: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+    flexDirection: "row",
+    alignItems: "flex-end",
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
-    backgroundColor: '#FFFFFF',
+    borderTopColor: "#E0E0E0",
+    backgroundColor: "#FFFFFF",
   },
   input: {
     flex: 1,
     maxHeight: 90,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#E4E4E4',
+    borderColor: "#E4E4E4",
     paddingHorizontal: 12,
     paddingVertical: 6,
     fontSize: 14,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: "#FAFAFA",
     marginRight: 8,
   },
   sendButton: {
@@ -599,26 +571,26 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   sendButtonText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   mediaButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#EDEDED',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#EDEDED",
+    alignItems: "center",
+    justifyContent: "center",
     marginRight: 8,
   },
   mediaButtonText: {
     fontSize: 28,
-    color: '#444',
+    color: "#444",
     marginTop: -2,
   },
 });

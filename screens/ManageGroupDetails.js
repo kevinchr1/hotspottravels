@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getAuth, getIdTokenResult } from "firebase/auth";
-import { getDatabase, ref, onValue } from "firebase/database";
+import { getDatabase, ref, onValue, get } from "firebase/database";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import Colors from "../constants/Colors";
@@ -28,6 +28,7 @@ export default function ManageGroupDetails({ navigation, route }) {
   const [isAdmin, setIsAdmin] = useState(null);
   const [group, setGroup] = useState(null);
   const [events, setEvents] = useState([]);
+  const [members, setMembers] = useState([]);
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -36,13 +37,24 @@ export default function ManageGroupDetails({ navigation, route }) {
   const [saving, setSaving] = useState(false);
   const [eventModalVisible, setEventModalVisible] = useState(false);
   const [availableLocations, setAvailableLocations] = useState([]);
+  const [resolvedDestinationKey, setResolvedDestinationKey] = useState("");
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [eventDate, setEventDate] = useState(new Date());
   const [eventDurationHours, setEventDurationHours] = useState("2");
+  const [savingEvent, setSavingEvent] = useState(false);
+  const [removingMemberUid, setRemovingMemberUid] = useState("");
+
+  const toDestinationKey = (name) =>
+    (name || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, "-")
+      .replace(/(^-|-$)/g, "");
 
   useEffect(() => {
     let unsubscribeGroup = null;
     let unsubscribeSchedule = null;
+    let unsubscribeMembers = null;
 
     const init = async () => {
       try {
@@ -65,7 +77,7 @@ export default function ManageGroupDetails({ navigation, route }) {
 
         const db = getDatabase();
 
-        unsubscribeGroup = onValue(ref(db, `groups/${groupId}`), (snapshot) => {
+        unsubscribeGroup = onValue(ref(db, `groups/${groupId}`), async (snapshot) => {
           const data = snapshot.exists() ? snapshot.val() : null;
           setGroup(data);
 
@@ -75,25 +87,36 @@ export default function ManageGroupDetails({ navigation, route }) {
           setEndDate(data?.endDate || "");
 
           if (data?.city) {
-            const cityKey = String(data.city).toLowerCase();
-            onValue(
-              ref(db, `locations/${cityKey}`),
-              (locationsSnap) => {
-                if (!locationsSnap.exists()) {
-                  setAvailableLocations([]);
-                  return;
-                }
-                const locationsData = locationsSnap.val();
-                const list = Object.keys(locationsData).map((id) => ({
-                  id,
-                  ...locationsData[id],
-                }));
-                setAvailableLocations(list);
-              },
-              { onlyOnce: true }
+            const city = String(data.city);
+            const candidates = [
+              city.toLowerCase(),
+              toDestinationKey(city),
+            ].filter(Boolean);
+
+            let matchedKey = "";
+            let list = [];
+            for (const key of candidates) {
+              const locationsSnap = await get(ref(db, `locations/${key}`));
+              if (!locationsSnap.exists()) continue;
+
+              const locationsData = locationsSnap.val();
+              list = Object.keys(locationsData).map((id) => ({
+                id,
+                ...locationsData[id],
+              }));
+              matchedKey = key;
+              break;
+            }
+
+            setResolvedDestinationKey(matchedKey);
+            setAvailableLocations(list);
+            setSelectedLocation((prev) =>
+              prev && list.some((l) => l.id === prev.id) ? prev : list[0] || null
             );
           } else {
+            setResolvedDestinationKey("");
             setAvailableLocations([]);
+            setSelectedLocation(null);
           }
 
           setLoading(false);
@@ -115,6 +138,50 @@ export default function ManageGroupDetails({ navigation, route }) {
             setEvents(list);
           }
         );
+
+        unsubscribeMembers = onValue(
+          ref(db, `groupMembers/${groupId}`),
+          async (snapshot) => {
+            if (!snapshot.exists()) {
+              setMembers([]);
+              return;
+            }
+
+            const membersData = snapshot.val() || {};
+            const memberRows = await Promise.all(
+              Object.keys(membersData).map(async (uid) => {
+                let displayName = `User ${uid.slice(0, 6)}`;
+                try {
+                  const userSnap = await get(ref(db, `users/${uid}`));
+                  const userData = userSnap.exists() ? userSnap.val() : {};
+                  displayName =
+                    userData?.displayName ||
+                    userData?.name ||
+                    userData?.fullName ||
+                    userData?.username ||
+                    userData?.email ||
+                    displayName;
+                } catch (_e) {
+                  // If users/{uid} is restricted by rules, keep UID fallback.
+                }
+
+                return {
+                  uid,
+                  role: membersData[uid]?.role || "member",
+                  joinedAt: Number(membersData[uid]?.joinedAt || 0),
+                  displayName,
+                };
+              })
+            );
+
+            memberRows.sort((a, b) => {
+              if (a.role === "host" && b.role !== "host") return -1;
+              if (b.role === "host" && a.role !== "host") return 1;
+              return a.joinedAt - b.joinedAt;
+            });
+            setMembers(memberRows);
+          }
+        );
       } catch (e) {
         console.log("ManageGroupDetails init error:", e);
         setIsAdmin(false);
@@ -128,6 +195,7 @@ export default function ManageGroupDetails({ navigation, route }) {
     return () => {
       if (typeof unsubscribeGroup === "function") unsubscribeGroup();
       if (typeof unsubscribeSchedule === "function") unsubscribeSchedule();
+      if (typeof unsubscribeMembers === "function") unsubscribeMembers();
     };
   }, [groupId]);
 
@@ -176,6 +244,13 @@ export default function ManageGroupDetails({ navigation, route }) {
   };
 
   const handleAddEvent = () => {
+    if (!availableLocations.length) {
+      Alert.alert(
+        "No locations",
+        "No locations found for this group's destination."
+      );
+      return;
+    }
     setEventDate(new Date());
     setEventDurationHours("2");
     setEventModalVisible(true);
@@ -193,21 +268,64 @@ export default function ManageGroupDetails({ navigation, route }) {
     }
 
     try {
+      setSavingEvent(true);
       const addGroupEvent = httpsCallable(functions, "addGroupEvent");
       await addGroupEvent({
         groupId,
         locationId: selectedLocation.id,
-        destinationKey: (group?.city || "").toLowerCase(),
+        destinationKey:
+          resolvedDestinationKey || toDestinationKey(group?.city || ""),
         startAt: eventDate.getTime(),
       });
 
       setEventModalVisible(false);
       setSelectedLocation(null);
       setEventDurationHours("2");
+      Alert.alert("Success", "Event added.");
     } catch (error) {
       console.log("Add event error:", error);
       Alert.alert("Error", error?.message || "Could not add event");
+    } finally {
+      setSavingEvent(false);
     }
+  };
+
+  const handleRemoveMember = (member) => {
+    if (!groupId || !member?.uid) return;
+    if (member.role === "host") {
+      Alert.alert("Not allowed", "Host cannot be removed.");
+      return;
+    }
+
+    Alert.alert(
+      "Remove member",
+      `Remove ${member.displayName} from this group?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setRemovingMemberUid(member.uid);
+              const removeGroupMember = httpsCallable(
+                functions,
+                "removeGroupMember"
+              );
+              await removeGroupMember({
+                groupId,
+                memberUid: member.uid,
+              });
+            } catch (error) {
+              console.log("Remove member error:", error);
+              Alert.alert("Error", error?.message || "Could not remove member");
+            } finally {
+              setRemovingMemberUid("");
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (!isAdmin && !loading) {
@@ -350,6 +468,41 @@ export default function ManageGroupDetails({ navigation, route }) {
               )}
             </View>
 
+            <View style={styles.card}>
+              <Text style={styles.sectionTitle}>
+                Members ({members.length})
+              </Text>
+              {members.length === 0 ? (
+                <Text style={styles.muted}>No members in this group yet.</Text>
+              ) : (
+                members.map((member) => (
+                  <View key={member.uid} style={styles.memberRow}>
+                    <View style={styles.memberMeta}>
+                      <Text style={styles.memberName}>{member.displayName}</Text>
+                      <Text style={styles.memberSub}>
+                        {member.role === "host" ? "Host" : "Member"} • {member.uid.slice(0, 8)}
+                      </Text>
+                    </View>
+                    {member.role === "host" ? (
+                      <View style={styles.hostPill}>
+                        <Text style={styles.hostPillText}>Host</Text>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.memberDeleteButton}
+                        disabled={removingMemberUid === member.uid}
+                        onPress={() => handleRemoveMember(member)}
+                      >
+                        <Text style={styles.memberDeleteButtonText}>
+                          {removingMemberUid === member.uid ? "Removing..." : "Remove"}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))
+              )}
+            </View>
+
             <TouchableOpacity
               style={styles.primaryButton}
               onPress={handleAddEvent}
@@ -409,8 +562,11 @@ export default function ManageGroupDetails({ navigation, route }) {
             <TouchableOpacity
               style={[styles.primaryButton, styles.modalPrimaryButton]}
               onPress={handleSaveEvent}
+              disabled={savingEvent}
             >
-              <Text style={styles.primaryButtonText}>Save Event</Text>
+              <Text style={styles.primaryButtonText}>
+                {savingEvent ? "Saving..." : "Save Event"}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -563,6 +719,53 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   deleteButtonText: {
+    color: "#B00020",
+    fontWeight: "700",
+    fontSize: 12,
+  },
+  memberRow: {
+    borderWidth: 1,
+    borderColor: "#EFEFEF",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    backgroundColor: "#fff",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  memberMeta: {
+    flex: 1,
+  },
+  memberName: {
+    color: NAVY,
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 2,
+  },
+  memberSub: {
+    color: "#666",
+    fontSize: 12,
+  },
+  hostPill: {
+    backgroundColor: "#FFF4E5",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  hostPillText: {
+    color: "#B35A00",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  memberDeleteButton: {
+    backgroundColor: "#FCE8E8",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  memberDeleteButtonText: {
     color: "#B00020",
     fontWeight: "700",
     fontSize: 12,

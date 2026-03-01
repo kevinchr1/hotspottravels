@@ -22,6 +22,7 @@ export default function AdminManageGroups({ navigation }) {
   const [isAdmin, setIsAdmin] = useState(null);
   const [groups, setGroups] = useState([]);
   const [duplicatingGroupId, setDuplicatingGroupId] = useState("");
+  const [deletingGroupId, setDeletingGroupId] = useState("");
 
   useEffect(() => {
     let unsubscribeGroups = null;
@@ -113,6 +114,34 @@ export default function AdminManageGroups({ navigation }) {
     }
   };
 
+  const handleDeleteGroup = (group) => {
+    Alert.alert(
+      "Delete group",
+      `Delete "${group?.name || "this group"}"? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setDeletingGroupId(group.groupId);
+              const functions = getFunctions(undefined, "europe-west1");
+              const deleteGroup = httpsCallable(functions, "deleteGroup");
+              await deleteGroup({ groupId: group.groupId });
+              Alert.alert("Group deleted", "The group was removed successfully.");
+            } catch (e) {
+              console.log("Delete group error:", e);
+              Alert.alert("Error", e?.message || "Could not delete group.");
+            } finally {
+              setDeletingGroupId("");
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <View style={styles.header}>
@@ -178,6 +207,7 @@ export default function AdminManageGroups({ navigation }) {
               <View style={styles.actionsRow}>
                 <TouchableOpacity
                   style={styles.secondaryHalfButton}
+                  disabled={deletingGroupId === group.groupId}
                   onPress={() =>
                     navigation.navigate("ManageGroupDetails", {
                       groupId: group.groupId,
@@ -188,11 +218,23 @@ export default function AdminManageGroups({ navigation }) {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.tertiaryHalfButton}
-                  disabled={duplicatingGroupId === group.groupId}
+                  disabled={
+                    duplicatingGroupId === group.groupId ||
+                    deletingGroupId === group.groupId
+                  }
                   onPress={() => handleDuplicateGroup(group)}
                 >
                   <Text style={styles.tertiaryHalfButtonText}>
                     {duplicatingGroupId === group.groupId ? "Duplicating..." : "Duplicate"}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.deleteHalfButton}
+                  disabled={deletingGroupId === group.groupId}
+                  onPress={() => handleDeleteGroup(group)}
+                >
+                  <Text style={styles.deleteHalfButtonText}>
+                    {deletingGroupId === group.groupId ? "Deleting..." : "Delete"}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -301,6 +343,17 @@ const styles = StyleSheet.create({
   },
   tertiaryHalfButtonText: {
     color: "#B35A00",
+    fontWeight: "700",
+  },
+  deleteHalfButton: {
+    flex: 1,
+    backgroundColor: "#FFE8E8",
+    borderRadius: 12,
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+  deleteHalfButtonText: {
+    color: "#B00020",
     fontWeight: "700",
   },
   stateCard: {

@@ -5,9 +5,10 @@ import {
   StyleSheet, 
   SafeAreaView, 
   ScrollView, 
-  Image,
+  Image as RNImage,
   TouchableOpacity,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import Colors from '../constants/Colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -31,6 +32,12 @@ const View_marker = ({ route, navigation }) => {
     };
   }, [route.params.marker]);
 
+  useEffect(() => {
+    if (marker?.imageUrl && /^https?:\/\//i.test(marker.imageUrl)) {
+      ExpoImage.prefetch(marker.imageUrl).catch(() => {});
+    }
+  }, [marker]);
+
   if (marker === '') {
     return (
       <SafeAreaView style={styles.screen}>
@@ -41,10 +48,9 @@ const View_marker = ({ route, navigation }) => {
     );
   }
 
-  const bannerSource =
+  const hasRemoteImage = !!(
     marker.imageUrl && /^https?:\/\//i.test(marker.imageUrl)
-      ? { uri: marker.imageUrl }
-      : require('../assets/image.png');
+  );
 
   return (
     <View style={styles.screen}>
@@ -54,7 +60,7 @@ const View_marker = ({ route, navigation }) => {
           <Text style={styles.backButtonText}>{'<'} Back</Text>
         </TouchableOpacity>
   
-        <Image
+        <RNImage
           source={require('../assets/hotspotflame.png')}
           style={styles.headerLogo}
         />
@@ -65,10 +71,19 @@ const View_marker = ({ route, navigation }) => {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Banner image */}
         <View style={styles.bannerWrapper}>
-          <Image
-            source={bannerSource}
-            style={styles.bannerImage}
-          />
+          {hasRemoteImage ? (
+            <ExpoImage
+              source={marker.imageUrl}
+              style={styles.bannerImage}
+              contentFit="cover"
+              transition={220}
+              cachePolicy="memory-disk"
+            />
+          ) : (
+            <View style={styles.bannerImageFallback}>
+              <Text style={styles.bannerImageFallbackText}>No image</Text>
+            </View>
+          )}
         </View>
   
         {/* Content (mindre “bokset”, mere luft) */}
@@ -145,6 +160,7 @@ const View_marker = ({ route, navigation }) => {
 
 const NAVY = '#1E3250';
 const ORANGE = '#FFA500';
+const IMAGE_FALLBACK_BG = '#F3F4F6';
 
 const styles = StyleSheet.create({
   screen: {
@@ -218,7 +234,18 @@ const styles = StyleSheet.create({
   bannerImage: {
     width: '100%',
     height: 210,
-    resizeMode: 'cover',
+  },
+  bannerImageFallback: {
+    width: '100%',
+    height: 210,
+    backgroundColor: IMAGE_FALLBACK_BG,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bannerImageFallbackText: {
+    fontSize: 14,
+    color: '#8B94A3',
+    fontWeight: '600',
   },
   costBadge: {
     position: 'absolute',
