@@ -18,7 +18,8 @@ import Colors from '../constants/Colors';
  * ActivitiesScreen
  * - Uses currentGroup (from users/{uid}.currentGroupId)
  * - Loads group data from groups/{groupId}
- * - Loads activities from Cities/{city}/Markers
+ * - Loads activities from groupSchedules/{groupId}
+ *   and resolves location data from locations/{destinationKey}/{locationId}
  * - Live updates via onValue
  * - UI matches the “nice” template with:
  *   - White header with logo + orange border
@@ -95,7 +96,6 @@ const ActivitiesScreen = ({ navigation }) => {
           }
 
           const groupData = groupSnap.val();
-          const city = groupData.city || 'Copenhagen';
 
           if (cancelled) return;
 
@@ -104,28 +104,81 @@ const ActivitiesScreen = ({ navigation }) => {
             ...groupData,
           });
 
-          // 3) Listen live on activities in Cities/{city}/Markers
-          activitiesRef = ref(db, `Cities/${city}/Markers`);
+          // 3) Listen live on group schedule instead of Cities
+          activitiesRef = ref(db, `groupSchedules/${currentGroupId}`);
 
-          onValue(activitiesRef, (snapshot) => {
+          onValue(activitiesRef, async (snapshot) => {
             if (cancelled) return;
 
-            const data = snapshot.val();
-            if (data) {
-              const activitiesArray = Object.keys(data).map((key) => ({
-                ...data[key],
-                id: key,
-                latlng: data[key]?.latlng
-                  ? {
-                      latitude: Number(data[key].latlng.latitude),
-                      longitude: Number(data[key].latlng.longitude),
-                    }
-                  : null,
+            const scheduleData = snapshot.val();
+
+            if (!scheduleData) {
+              setActivities([]);
+              setLoading(false);
+              return;
+            }
+
+            try {
+              const events = Object.keys(scheduleData).map((eventId) => ({
+                id: eventId,
+                ...scheduleData[eventId],
               }));
+
+              // Sort by startAt (chronological)
+              events.sort((a, b) => (a.startAt || 0) - (b.startAt || 0));
+
+              const activitiesArray = [];
+
+              for (const event of events) {
+                const { locationId, destinationKey, startAt } = event;
+
+                if (!locationId || !destinationKey) continue;
+
+                const locationRef = ref(
+                  db,
+                  `locations/${destinationKey}/${locationId}`
+                );
+
+                const locationSnap = await get(locationRef);
+
+                if (!locationSnap.exists()) {
+                  activitiesArray.push({
+                    id: event.id,
+                    title: '⚠ Deleted location',
+                    description: 'This location no longer exists.',
+                    address: '',
+                    type: 'Activity',
+                    latlng: null,
+                    startAt,
+                  });
+                  continue;
+                }
+
+                const location = locationSnap.val();
+
+                activitiesArray.push({
+                  id: event.id,
+                  title: location.title || 'Hotspot activity',
+                  description: location.description || '',
+                  address: location.address || '',
+                  type: location.type || 'Activity',
+                  latlng:
+                    location.lat && location.lng
+                      ? {
+                          latitude: Number(location.lat),
+                          longitude: Number(location.lng),
+                        }
+                      : null,
+                  startAt,
+                });
+              }
+
               setActivities(activitiesArray);
-            } else {
+            } catch (err) {
+              console.log('Schedule load error:', err);
               setActivities([]);
             }
+
             setLoading(false);
           });
         } catch (error) {

@@ -29,6 +29,7 @@ import AdminCreateGroup from "./screens/AdminCreateGroup";
 import AdminDestinations from "./screens/AdminDestinations";
 import AdminManageGroups from "./screens/AdminManageGroups";
 import AdminManageDestinations from "./screens/AdminManageDestinations";
+import ManageGroupDetails from "./screens/ManageGroupDetails";
 
 // Firebase config
 const firebaseConfig = {
@@ -182,6 +183,7 @@ const MainStack = () => (
     <Stack.Screen name="AdminDestinations" component={AdminDestinations} />
     <Stack.Screen name="AdminManageGroups" component={AdminManageGroups} />
     <Stack.Screen name="AdminManageDestinations" component={AdminManageDestinations} />
+    <Stack.Screen name="ManageGroupDetails" component={ManageGroupDetails} />
   </Stack.Navigator>
 );
 

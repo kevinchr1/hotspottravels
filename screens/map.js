@@ -18,8 +18,8 @@ import Colors from '../constants/Colors';
 
 /**
  * Map screen:
- * - If user is in a group -> fetch group.city and show Cities/{city}/Markers
- * - Also fetch group schedule from groupSchedules/{groupId}
+ * - If user is in a group -> fetch group schedule from groupSchedules/{groupId}
+ * - Resolve map markers from locations/{destinationKey}/{locationId}
  * - Banner shows next upcoming activity based on schedule (startAt)
  * - If no upcoming activities -> show "All activities completed"
  * - Tap banner -> zoom to next activity
@@ -42,7 +42,7 @@ const Map = ({ route }) => {
   const [currentGroupName, setCurrentGroupName] = useState(null);
   const [currentGroupId, setCurrentGroupId] = useState(null);
 
-  // Schedule events: [{ id, markerId, startAt }]
+  // Schedule events: [{ id, locationId, destinationKey, startAt }]
   const [scheduleEvents, setScheduleEvents] = useState([]);
 
   // Banner selection
@@ -89,7 +89,6 @@ const Map = ({ route }) => {
       const user = auth.currentUser;
       const db = getDatabase();
 
-      let markersRef = null;
       let scheduleRef = null;
       let cancelled = false;
 
@@ -129,34 +128,16 @@ const Map = ({ route }) => {
           // Reset manual selection when switching group/city
           setSelectedMarkerId(null);
 
-          // Listen to markers
-          markersRef = ref(db, `Cities/${effectiveCity}/Markers`);
-          onValue(markersRef, (snapshot) => {
-            if (cancelled) return;
-            const data = snapshot.val();
-            if (data) {
-              const markersArray = Object.keys(data).map((key) => ({
-                ...data[key],
-                id: key,
-                latlng: {
-                  latitude: parseFloat(data[key].latlng.latitude),
-                  longitude: parseFloat(data[key].latlng.longitude),
-                },
-              }));
-              setMarkers(markersArray);
-            } else {
-              setMarkers([]);
-            }
-          });
-
           // Listen to schedule only if in a group
           if (groupId) {
             scheduleRef = ref(db, `groupSchedules/${groupId}`);
-            onValue(scheduleRef, (snapshot) => {
+            onValue(scheduleRef, async (snapshot) => {
               if (cancelled) return;
+
               const data = snapshot.val();
               if (!data) {
                 setScheduleEvents([]);
+                setMarkers([]);
                 return;
               }
 
@@ -165,17 +146,51 @@ const Map = ({ route }) => {
                   const e = data[id] || {};
                   return {
                     id,
-                    markerId: e.markerId || null,
+                    locationId: e.locationId || null,
+                    destinationKey: e.destinationKey || null,
                     startAt: typeof e.startAt === 'number' ? e.startAt : 0,
                   };
                 })
-                .filter((e) => e.markerId && e.startAt)
+                .filter((e) => e.locationId && e.destinationKey && e.startAt)
                 .sort((a, b) => a.startAt - b.startAt);
 
               setScheduleEvents(events);
+
+              // Load locations for map markers from schedule
+              const newMarkers = [];
+
+              for (const event of events) {
+                const locRef = ref(
+                  db,
+                  `locations/${event.destinationKey}/${event.locationId}`
+                );
+
+                const locSnap = await get(locRef);
+                if (!locSnap.exists()) continue;
+
+                const loc = locSnap.val();
+                if (!loc.lat || !loc.lng) continue;
+
+                newMarkers.push({
+                  id: event.id,
+                  title: loc.title || 'Hotspot activity',
+                  description: loc.description || '',
+                  type: loc.type || 'Activity',
+                  address: loc.address || '',
+                  latlng: {
+                    latitude: Number(loc.lat),
+                    longitude: Number(loc.lng),
+                  },
+                });
+              }
+
+              if (!cancelled) {
+                setMarkers(newMarkers);
+              }
             });
           } else {
             setScheduleEvents([]);
+            setMarkers([]);
           }
         } catch (err) {
           console.log('Map fetch error:', err);
@@ -186,7 +201,6 @@ const Map = ({ route }) => {
 
       return () => {
         cancelled = true;
-        if (markersRef) off(markersRef);
         if (scheduleRef) off(scheduleRef);
       };
     }, [auth])
@@ -214,8 +228,8 @@ const Map = ({ route }) => {
     if (selectedMarkerId && markerById[selectedMarkerId]) {
       return markerById[selectedMarkerId];
     }
-    if (nextScheduledEvent?.markerId && markerById[nextScheduledEvent.markerId]) {
-      return markerById[nextScheduledEvent.markerId];
+    if (nextScheduledEvent?.id && markerById[nextScheduledEvent.id]) {
+      return markerById[nextScheduledEvent.id];
     }
     return null;
   }, [selectedMarkerId, nextScheduledEvent, markerById]);
@@ -229,7 +243,7 @@ const Map = ({ route }) => {
 
     // Manual selection: try find event for that marker (closest upcoming, else first)
     if (selectedMarkerId) {
-      const eventsForMarker = scheduleEvents.filter((e) => e.markerId === selectedMarkerId);
+      const eventsForMarker = scheduleEvents.filter((e) => e.id === selectedMarkerId);
       if (!eventsForMarker.length) return null;
 
       const now = Date.now();

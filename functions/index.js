@@ -113,3 +113,119 @@ exports.createGroup = onCall(
     };
   }
 );
+
+exports.updateGroupMetadata = onCall(
+  {
+    region: "europe-west1",
+    database: "hotspot-8eff0-default-rtdb",
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "You must be logged in.");
+    }
+    if (request.auth.token?.admin !== true) {
+      throw new HttpsError("permission-denied", "Admin only");
+    }
+
+    const data = request.data || {};
+    const groupId = isNonEmptyString(data.groupId) ? data.groupId.trim() : "";
+    const name = isNonEmptyString(data.name) ? data.name.trim() : "";
+    const description = typeof data.description === "string" ? data.description.trim() : "";
+    const startDate = isNonEmptyString(data.startDate) ? data.startDate.trim() : "";
+    const endDate = isNonEmptyString(data.endDate) ? data.endDate.trim() : "";
+
+    if (!groupId) {
+      throw new HttpsError("invalid-argument", "Missing 'groupId'.");
+    }
+    if (!name) {
+      throw new HttpsError("invalid-argument", "Missing 'name'.");
+    }
+    if (!startDate || !endDate) {
+      throw new HttpsError("invalid-argument", "Missing 'startDate' or 'endDate'.");
+    }
+
+    const db = getDatabase();
+    await db.ref(`groups/${groupId}`).update({
+      name,
+      description,
+      startDate,
+      endDate,
+    });
+
+    return { success: true };
+  }
+);
+
+exports.addGroupEvent = onCall(
+  {
+    region: "europe-west1",
+    database: "hotspot-8eff0-default-rtdb",
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "You must be logged in.");
+    }
+    if (request.auth.token?.admin !== true) {
+      throw new HttpsError("permission-denied", "Admin only");
+    }
+
+    const data = request.data || {};
+    const groupId = isNonEmptyString(data.groupId) ? data.groupId.trim() : "";
+    const locationId = isNonEmptyString(data.locationId) ? data.locationId.trim() : "";
+    const destinationKey = isNonEmptyString(data.destinationKey) ? data.destinationKey.trim() : "";
+    const startAt = Number(data.startAt);
+
+    if (!groupId) {
+      throw new HttpsError("invalid-argument", "Missing 'groupId'.");
+    }
+    if (!locationId) {
+      throw new HttpsError("invalid-argument", "Missing 'locationId'.");
+    }
+    if (!destinationKey) {
+      throw new HttpsError("invalid-argument", "Missing 'destinationKey'.");
+    }
+    if (!Number.isFinite(startAt)) {
+      throw new HttpsError("invalid-argument", "Invalid 'startAt'.");
+    }
+
+    const db = getDatabase();
+    await db.ref(`groupSchedules/${groupId}`).push({
+      locationId,
+      destinationKey,
+      startAt,
+    });
+
+    return { success: true };
+  }
+);
+
+exports.deleteGroupEvent = onCall(
+  {
+    region: "europe-west1",
+    database: "hotspot-8eff0-default-rtdb",
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "You must be logged in.");
+    }
+    if (request.auth.token?.admin !== true) {
+      throw new HttpsError("permission-denied", "Admin only");
+    }
+
+    const data = request.data || {};
+    const groupId = isNonEmptyString(data.groupId) ? data.groupId.trim() : "";
+    const eventId = isNonEmptyString(data.eventId) ? data.eventId.trim() : "";
+
+    if (!groupId) {
+      throw new HttpsError("invalid-argument", "Missing 'groupId'.");
+    }
+    if (!eventId) {
+      throw new HttpsError("invalid-argument", "Missing 'eventId'.");
+    }
+
+    const db = getDatabase();
+    await db.ref(`groupSchedules/${groupId}/${eventId}`).remove();
+
+    return { success: true };
+  }
+);
