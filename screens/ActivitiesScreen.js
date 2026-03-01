@@ -30,6 +30,15 @@ import Colors from '../constants/Colors';
 
 const NAVY = '#1E3250';
 const ORANGE = '#FFA500';
+const ACTIVITY_TYPES = ['Activity', 'Food', 'Bar', 'Sightseeing', 'Nightlife'];
+
+const normalizeType = (rawType) => {
+  if (!rawType || typeof rawType !== 'string') return 'Activity';
+  const match = ACTIVITY_TYPES.find(
+    (item) => item.toLowerCase() === rawType.trim().toLowerCase()
+  );
+  return match || 'Activity';
+};
 
 const ActivitiesScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -161,7 +170,8 @@ const ActivitiesScreen = ({ navigation }) => {
                   title: location.title || 'Hotspot activity',
                   description: location.description || '',
                   address: location.address || '',
-                  type: location.type || 'Activity',
+                  imageUrl: location.imageUrl || '',
+                  type: normalizeType(location.type),
                   latlng:
                     location.lat && location.lng
                       ? {
@@ -309,21 +319,28 @@ const ActivitiesScreen = ({ navigation }) => {
 
                 {activities.map((activity) => {
                   const title = activity.title || 'Hotspot activity';
-                  const typeLabel = activity.type || 'Activity';
+                  const typeLabel = normalizeType(activity.type);
                   const address = activity.address || 'Location to be announced';
                   const description =
                     activity.description || 'Details will be added later';
+                  const imageUrl = activity.imageUrl || '';
                   const priceLine = activity.cost
                     ? `Price level: ${activity.cost}`
                     : null;
 
                   return (
                     <View key={activity.id} style={styles.activityCard}>
-                      {/* Image placeholder – later you can map a real image field */}
                       <View style={styles.activityImagePlaceholder}>
-                        <Text style={styles.activityImagePlaceholderText}>
-                          Activity
-                        </Text>
+                        {imageUrl ? (
+                          <Image
+                            source={{ uri: imageUrl }}
+                            style={styles.activityImage}
+                          />
+                        ) : (
+                          <Text style={styles.activityImagePlaceholderText}>
+                            Activity
+                          </Text>
+                        )}
                       </View>
 
                       <View style={styles.activityContent}>
@@ -487,9 +504,16 @@ const styles = StyleSheet.create({
   },
   activityImagePlaceholder: {
     width: 90,
+    flexShrink: 0,
     backgroundColor: '#F3F3F3',
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  activityImage: {
+    ...StyleSheet.absoluteFillObject,
+    resizeMode: 'cover',
   },
   activityImagePlaceholderText: {
     fontSize: 11,

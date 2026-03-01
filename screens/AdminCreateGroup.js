@@ -15,6 +15,7 @@ import { getFunctions, httpsCallable } from "firebase/functions";
 
 const NAVY = "#1E3250";
 const ORANGE = "#FFA500";
+const PLACEHOLDER = "#6B7280";
 
 const formatYMD = (d) => {
   if (!d) return "";
@@ -181,6 +182,7 @@ export default function CreateGroupScreen({ navigation }) {
             value={groupName}
             onChangeText={setGroupName}
             placeholder="E.g. Hotspot Krakow Feb"
+            placeholderTextColor={PLACEHOLDER}
             style={inputStyle}
           />
 

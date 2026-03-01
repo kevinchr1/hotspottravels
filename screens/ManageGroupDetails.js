@@ -18,6 +18,7 @@ import Colors from "../constants/Colors";
 
 const NAVY = "#1E3250";
 const ORANGE = "#FFA500";
+const PLACEHOLDER = "#6B7280";
 
 export default function ManageGroupDetails({ navigation, route }) {
   const groupId = route?.params?.groupId;
@@ -262,6 +263,7 @@ export default function ManageGroupDetails({ navigation, route }) {
                 value={name}
                 onChangeText={setName}
                 placeholder="Group name"
+                placeholderTextColor={PLACEHOLDER}
               />
 
               <Text style={styles.label}>Description</Text>
@@ -270,6 +272,7 @@ export default function ManageGroupDetails({ navigation, route }) {
                 value={description}
                 onChangeText={setDescription}
                 placeholder="Description"
+                placeholderTextColor={PLACEHOLDER}
                 multiline
               />
 
@@ -279,6 +282,7 @@ export default function ManageGroupDetails({ navigation, route }) {
                 value={startDate}
                 onChangeText={setStartDate}
                 placeholder="YYYY-MM-DD"
+                placeholderTextColor={PLACEHOLDER}
               />
 
               <Text style={styles.label}>End date</Text>
@@ -287,6 +291,7 @@ export default function ManageGroupDetails({ navigation, route }) {
                 value={endDate}
                 onChangeText={setEndDate}
                 placeholder="YYYY-MM-DD"
+                placeholderTextColor={PLACEHOLDER}
               />
 
               <Text style={styles.codeText}>
@@ -398,6 +403,7 @@ export default function ManageGroupDetails({ navigation, route }) {
               onChangeText={setEventDurationHours}
               keyboardType="decimal-pad"
               placeholder="e.g. 2"
+              placeholderTextColor={PLACEHOLDER}
             />
 
             <TouchableOpacity

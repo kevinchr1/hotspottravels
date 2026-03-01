@@ -6,10 +6,12 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getAuth, getIdTokenResult } from "firebase/auth";
 import { getDatabase, onValue, ref } from "firebase/database";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import Colors from "../constants/Colors";
 
 const NAVY = "#1E3250";
@@ -19,6 +21,7 @@ export default function AdminManageGroups({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(null);
   const [groups, setGroups] = useState([]);
+  const [duplicatingGroupId, setDuplicatingGroupId] = useState("");
 
   useEffect(() => {
     let unsubscribeGroups = null;
@@ -78,6 +81,38 @@ export default function AdminManageGroups({ navigation }) {
     };
   }, []);
 
+  const handleDuplicateGroup = async (group) => {
+    try {
+      if (!group?.name || !group?.city || !group?.startDate || !group?.endDate) {
+        Alert.alert("Error", "Group is missing required fields.");
+        return;
+      }
+
+      setDuplicatingGroupId(group.groupId);
+      const functions = getFunctions(undefined, "europe-west1");
+      const createGroup = httpsCallable(functions, "createGroup");
+
+      const result = await createGroup({
+        name: `${group.name} (Copy)`,
+        description: group.description || group.name || "",
+        city: group.city,
+        startDate: group.startDate,
+        endDate: group.endDate,
+      });
+
+      const { code } = result?.data || {};
+      Alert.alert(
+        "Group duplicated",
+        code ? `New join code: ${code}` : "Group duplicated successfully."
+      );
+    } catch (e) {
+      console.log("Duplicate group error:", e);
+      Alert.alert("Error", e?.message || "Could not duplicate group.");
+    } finally {
+      setDuplicatingGroupId("");
+    }
+  };
+
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <View style={styles.header}>
@@ -116,30 +151,52 @@ export default function AdminManageGroups({ navigation }) {
           </View>
         ) : (
           groups.map((group) => (
-            <TouchableOpacity
-              key={group.groupId}
-              style={styles.card}
-              onPress={() =>
-                navigation.navigate("ManageGroupDetails", {
-                  groupId: group.groupId,
-                })
-              }
-            >
-              <Text style={styles.groupName}>
-                {group.name || "Untitled group"}
-              </Text>
-              <Text style={styles.groupMeta}>
-                {group.city || "No city"}
-              </Text>
-              <Text style={styles.groupMeta}>
-                {(group.startDate || "No start date") +
-                  " -> " +
-                  (group.endDate || "No end date")}
-              </Text>
-              <Text style={styles.groupCode}>
-                Join code: {group.code || "N/A"}
-              </Text>
-            </TouchableOpacity>
+            <View key={group.groupId} style={styles.card}>
+              <TouchableOpacity
+                onPress={() =>
+                  navigation.navigate("ManageGroupDetails", {
+                    groupId: group.groupId,
+                  })
+                }
+              >
+                <Text style={styles.groupName}>
+                  {group.name || "Untitled group"}
+                </Text>
+                <Text style={styles.groupMeta}>
+                  {group.city || "No city"}
+                </Text>
+                <Text style={styles.groupMeta}>
+                  {(group.startDate || "No start date") +
+                    " -> " +
+                    (group.endDate || "No end date")}
+                </Text>
+                <Text style={styles.groupCode}>
+                  Join code: {group.code || "N/A"}
+                </Text>
+              </TouchableOpacity>
+
+              <View style={styles.actionsRow}>
+                <TouchableOpacity
+                  style={styles.secondaryHalfButton}
+                  onPress={() =>
+                    navigation.navigate("ManageGroupDetails", {
+                      groupId: group.groupId,
+                    })
+                  }
+                >
+                  <Text style={styles.secondaryHalfButtonText}>Edit</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.tertiaryHalfButton}
+                  disabled={duplicatingGroupId === group.groupId}
+                  onPress={() => handleDuplicateGroup(group)}
+                >
+                  <Text style={styles.tertiaryHalfButtonText}>
+                    {duplicatingGroupId === group.groupId ? "Duplicating..." : "Duplicate"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           ))
         )}
       </ScrollView>
@@ -218,6 +275,33 @@ const styles = StyleSheet.create({
     marginTop: 8,
     color: "#777",
     fontSize: 12,
+  },
+  actionsRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 12,
+  },
+  secondaryHalfButton: {
+    flex: 1,
+    backgroundColor: "#F5F5F5",
+    borderRadius: 12,
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+  secondaryHalfButtonText: {
+    color: NAVY,
+    fontWeight: "700",
+  },
+  tertiaryHalfButton: {
+    flex: 1,
+    backgroundColor: "#FFF4E5",
+    borderRadius: 12,
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+  tertiaryHalfButtonText: {
+    color: "#B35A00",
+    fontWeight: "700",
   },
   stateCard: {
     backgroundColor: "#fff",

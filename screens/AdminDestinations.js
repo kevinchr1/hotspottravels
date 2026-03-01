@@ -7,16 +7,33 @@ import {
   ScrollView,
   Alert,
   StyleSheet,
+  Image,
+  ActivityIndicator,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "../constants/Colors";
 import { getAuth, getIdTokenResult } from "firebase/auth";
 import { getDatabase, ref, get, set, push } from "firebase/database";
+import {
+  getStorage,
+  ref as storageRef,
+  uploadBytes,
+  getDownloadURL,
+} from "firebase/storage";
 
 const GOOGLE_GEOCODING_KEY =
   process.env.EXPO_PUBLIC_GOOGLE_GEOCODING_KEY || "";
 const NAVY = "#1E3250";
 const ORANGE = "#FFA500";
+const PLACEHOLDER = "#6B7280";
+const LOCATION_TYPES = [
+  "Activity",
+  "Food",
+  "Bar",
+  "Sightseeing",
+  "Nightlife",
+];
 
 const slugifyKey = (name) =>
   (name || "")
@@ -40,6 +57,9 @@ export default function AdminDestinations() {
   const [locationTitle, setLocationTitle] = useState("");
   const [locationAddress, setLocationAddress] = useState("");
   const [locationDescription, setLocationDescription] = useState("");
+  const [locationImageUrl, setLocationImageUrl] = useState("");
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [locationType, setLocationType] = useState("Activity");
 
   const canCreateDestination = useMemo(
     () =>
@@ -144,6 +164,57 @@ export default function AdminDestinations() {
     }
   };
 
+  const handlePickLocationImage = async () => {
+    if (!(await requireAdmin())) return;
+
+    try {
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission required",
+          "We need photo access to upload location images."
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+      if (result.canceled) return;
+
+      const asset = result.assets?.[0];
+      if (!asset?.uri) {
+        Alert.alert("Error", "Could not read selected image.");
+        return;
+      }
+
+      setUploadingImage(true);
+
+      const auth = getAuth();
+      const uid = auth.currentUser?.uid || "admin";
+      const storage = getStorage();
+      const ext =
+        (asset?.fileName?.split(".").pop() || "jpg").toLowerCase();
+      const path = `locationImages/${selectedDestination || "unknown"}/${uid}/${Date.now()}.${ext}`;
+      const fileRef = storageRef(storage, path);
+
+      const response = await fetch(asset.uri);
+      const blob = await response.blob();
+
+      await uploadBytes(fileRef, blob);
+      const url = await getDownloadURL(fileRef);
+      setLocationImageUrl(url);
+    } catch (e) {
+      Alert.alert("Error", e?.message || "Could not upload image.");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   const handleCreateLocation = async () => {
     if (!(await requireAdmin())) return;
 
@@ -181,6 +252,8 @@ export default function AdminDestinations() {
         title: locationTitle.trim(),
         address: locationAddress.trim() || "",
         description: locationDescription.trim() || "",
+        imageUrl: locationImageUrl.trim() || "",
+        type: locationType,
         lat: coords.lat,
         lng: coords.lng,
         createdAt: Date.now(),
@@ -189,6 +262,8 @@ export default function AdminDestinations() {
       setLocationTitle("");
       setLocationAddress("");
       setLocationDescription("");
+      setLocationImageUrl("");
+      setLocationType("Activity");
 
       Alert.alert("Created", "Location created.");
     } catch (e) {
@@ -208,6 +283,7 @@ export default function AdminDestinations() {
           <TextInput
             style={styles.input}
             placeholder="Barcelona"
+            placeholderTextColor={PLACEHOLDER}
             value={newDestination}
             onChangeText={setNewDestination}
           />
@@ -215,6 +291,7 @@ export default function AdminDestinations() {
           <TextInput
             style={styles.input}
             placeholder="Country (e.g. Spain)"
+            placeholderTextColor={PLACEHOLDER}
             value={newCountry}
             onChangeText={setNewCountry}
           />
@@ -265,6 +342,7 @@ export default function AdminDestinations() {
           <TextInput
             style={styles.input}
             placeholder="Location title"
+            placeholderTextColor={PLACEHOLDER}
             value={locationTitle}
             onChangeText={setLocationTitle}
           />
@@ -272,6 +350,7 @@ export default function AdminDestinations() {
           <TextInput
             style={styles.input}
             placeholder="Address"
+            placeholderTextColor={PLACEHOLDER}
             value={locationAddress}
             onChangeText={setLocationAddress}
           />
@@ -279,10 +358,60 @@ export default function AdminDestinations() {
           <TextInput
             style={[styles.input, styles.textArea]}
             placeholder="Description"
+            placeholderTextColor={PLACEHOLDER}
             multiline
             value={locationDescription}
             onChangeText={setLocationDescription}
           />
+
+          <Text style={styles.label}>Location image (optional)</Text>
+          <TouchableOpacity
+            style={[
+              styles.secondaryButton,
+              uploadingImage && styles.disabledButton,
+            ]}
+            onPress={handlePickLocationImage}
+            disabled={uploadingImage}
+          >
+            <Text style={styles.secondaryButtonText}>
+              {uploadingImage ? "Uploading image..." : "Upload image"}
+            </Text>
+          </TouchableOpacity>
+          {uploadingImage && (
+            <ActivityIndicator
+              color={ORANGE}
+              style={styles.uploadSpinner}
+            />
+          )}
+          {!!locationImageUrl && (
+            <Image
+              source={{ uri: locationImageUrl }}
+              style={styles.previewImage}
+            />
+          )}
+
+          <Text style={styles.label}>Category</Text>
+          <View style={styles.typeList}>
+            {LOCATION_TYPES.map((type) => (
+              <TouchableOpacity
+                key={type}
+                style={[
+                  styles.typeItem,
+                  locationType === type && styles.typeItemSelected,
+                ]}
+                onPress={() => setLocationType(type)}
+              >
+                <Text
+                  style={[
+                    styles.typeText,
+                    locationType === type && styles.typeTextSelected,
+                  ]}
+                >
+                  {type}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
           <TouchableOpacity
             style={[
@@ -347,12 +476,33 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
   },
+  secondaryButton: {
+    backgroundColor: "#F5F5F5",
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    marginBottom: 12,
+  },
   primaryButtonText: {
     color: "#fff",
     fontWeight: "700",
   },
+  secondaryButtonText: {
+    color: NAVY,
+    fontWeight: "700",
+  },
   disabledButton: {
     backgroundColor: "#E6E6E6",
+  },
+  uploadSpinner: {
+    marginBottom: 12,
+  },
+  previewImage: {
+    width: "100%",
+    height: 140,
+    borderRadius: 12,
+    marginBottom: 12,
+    backgroundColor: "#F3F3F3",
   },
   label: {
     fontSize: 13,
@@ -360,6 +510,11 @@ const styles = StyleSheet.create({
     color: "#666",
   },
   destinationList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: 12,
+  },
+  typeList: {
     flexDirection: "row",
     flexWrap: "wrap",
     marginBottom: 12,
@@ -382,6 +537,28 @@ const styles = StyleSheet.create({
     color: NAVY,
   },
   destinationTextSelected: {
+    color: "#fff",
+    fontWeight: "700",
+  },
+  typeItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#DDD",
+    marginRight: 8,
+    marginBottom: 8,
+    backgroundColor: "#fff",
+  },
+  typeItemSelected: {
+    backgroundColor: ORANGE,
+    borderColor: ORANGE,
+  },
+  typeText: {
+    fontSize: 13,
+    color: NAVY,
+  },
+  typeTextSelected: {
     color: "#fff",
     fontWeight: "700",
   },

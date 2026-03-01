@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import Colors from '../constants/Colors';
-import RatingCard from '../components/RatingCard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /**
@@ -42,6 +41,10 @@ const View_marker = ({ route, navigation }) => {
     );
   }
 
+  const bannerSource =
+    marker.imageUrl && /^https?:\/\//i.test(marker.imageUrl)
+      ? { uri: marker.imageUrl }
+      : require('../assets/image.png');
 
   return (
     <View style={styles.screen}>
@@ -63,7 +66,7 @@ const View_marker = ({ route, navigation }) => {
         {/* Banner image */}
         <View style={styles.bannerWrapper}>
           <Image
-            source={require('../assets/image.png')}
+            source={bannerSource}
             style={styles.bannerImage}
           />
         </View>
@@ -120,11 +123,13 @@ const View_marker = ({ route, navigation }) => {
             <TouchableOpacity
               style={styles.primaryButton}
               onPress={() => {
-                // Hvis din Tab hedder "Map" (som du viste), så brug "Map" her:
-                navigation.navigate('Map', {
-                  focusMarker: {
-                    markerId: marker.id,
-                    latlng: marker.latlng,
+                navigation.navigate('Tabs', {
+                  screen: 'Map',
+                  params: {
+                    focusMarker: {
+                      markerId: marker.id,
+                      latlng: marker.latlng,
+                    },
                   },
                 });
               }}

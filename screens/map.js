@@ -177,6 +177,7 @@ const Map = ({ route }) => {
                   description: loc.description || '',
                   type: loc.type || 'Activity',
                   address: loc.address || '',
+                  imageUrl: loc.imageUrl || '',
                   latlng: {
                     latitude: Number(loc.lat),
                     longitude: Number(loc.lng),
