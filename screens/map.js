@@ -30,6 +30,16 @@ import Colors from '../constants/Colors';
 const NAVY = '#1E3250';
 const ORANGE = '#FFA500';
 const IMAGE_FALLBACK_BG = '#F3F4F6';
+const ACTIVITY_TYPES = ['Activity', 'Food', 'Bar', 'Sightseeing', 'Nightlife'];
+const TYPE_FILTERS = ['All', ...ACTIVITY_TYPES];
+
+const normalizeType = (rawType) => {
+  if (!rawType || typeof rawType !== 'string') return 'Activity';
+  const match = ACTIVITY_TYPES.find(
+    (item) => item.toLowerCase() === rawType.trim().toLowerCase()
+  );
+  return match || 'Activity';
+};
 
 const Map = ({ route }) => {
   const navigation = useNavigation();
@@ -49,6 +59,7 @@ const Map = ({ route }) => {
 
   // Banner selection
   const [selectedMarkerId, setSelectedMarkerId] = useState(null); // manual selection overrides "next"
+  const [selectedTypeFilter, setSelectedTypeFilter] = useState('All');
   const auth = getAuth();
 
   // Temporary flag for Add Marker button
@@ -215,6 +226,13 @@ const Map = ({ route }) => {
     for (const m of markers) map[m.id] = m;
     return map;
   }, [markers]);
+
+  const filteredMarkers = useMemo(() => {
+    if (selectedTypeFilter === 'All') return markers;
+    return markers.filter(
+      (marker) => normalizeType(marker.type) === selectedTypeFilter
+    );
+  }, [markers, selectedTypeFilter]);
 
   // Find next scheduled event (first event in the future)
   const nextScheduledEvent = useMemo(() => {
@@ -432,10 +450,14 @@ const Map = ({ route }) => {
             />
           </View>
           <View style={styles.filtersRow}>
-            <FilterChip label="All" />
-            <FilterChip label="Food & Drinks" />
-            <FilterChip label="Activities" />
-            <FilterChip label="Must see" />
+            {TYPE_FILTERS.map((type) => (
+              <FilterChip
+                key={type}
+                label={type}
+                active={selectedTypeFilter === type}
+                onPress={() => setSelectedTypeFilter(type)}
+              />
+            ))}
           </View>
         </View>
 
@@ -457,7 +479,7 @@ const Map = ({ route }) => {
                 showsCompass
                 showsScale
               >
-                {markers.map((marker) => {
+                {filteredMarkers.map((marker) => {
                   const isSelected = marker.id === selectedMarkerId;
                   return (
                     <Marker
@@ -548,10 +570,13 @@ const Map = ({ route }) => {
   );
 };
 
-const FilterChip = ({ label, onPress }) => {
+const FilterChip = ({ label, onPress, active }) => {
   return (
-    <TouchableOpacity style={styles.chip} onPress={onPress}>
-      <Text style={styles.chipText}>{label}</Text>
+    <TouchableOpacity
+      style={[styles.chip, active && styles.chipActive]}
+      onPress={onPress}
+    >
+      <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
     </TouchableOpacity>
   );
 };
@@ -641,10 +666,19 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: '#F5F5F5',
   },
+  chipActive: {
+    backgroundColor: '#FFF4E5',
+    borderWidth: 1,
+    borderColor: ORANGE,
+  },
   chipText: {
     fontSize: 12,
     color: NAVY,
     fontWeight: '500',
+  },
+  chipTextActive: {
+    color: '#B35A00',
+    fontWeight: '700',
   },
   mapCard: {
     flex: 1,

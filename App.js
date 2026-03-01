@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Image, View, ActivityIndicator } from 'react-native';
+import { StyleSheet, Image, View, ActivityIndicator, Animated, TouchableOpacity } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -54,8 +54,8 @@ if (getApps().length < 1) {
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
-const NAVY = '#1E3250';
 const ORANGE_DARK = '#E69500';
+const INDICATOR_WIDTH = 22;
 const TAB_MAP_ICON = require('./assets/maplogo.png');
 const TAB_ACTIVITIES_ICON = require('./assets/activitylogo.png');
 const TAB_CHAT_ICON = require('./assets/chatlogo.png');
@@ -82,15 +82,82 @@ const TabItem = ({ focused, source, size }) => {
           opacity: focused ? 1 : 0.55,
         }}
       />
-      <View
-        style={{
-          marginTop: 6,
-          height: 3,
-          width: 22,
-          borderRadius: 2,
-          backgroundColor: focused ? ORANGE_DARK : 'transparent',
-        }}
-      />
+    </View>
+  );
+};
+
+const getTabIconConfig = (routeName) => {
+  if (routeName === 'Map') return { source: TAB_MAP_ICON, size: 45 };
+  if (routeName === 'Activities') return { source: TAB_ACTIVITIES_ICON, size: 36 };
+  if (routeName === 'Messages') return { source: TAB_CHAT_ICON, size: 36 };
+  return { source: TAB_PROFILE_ICON, size: 45 };
+};
+
+const AnimatedTabBar = ({ state, descriptors, navigation }) => {
+  const [containerWidth, setContainerWidth] = useState(0);
+  const translateX = React.useRef(new Animated.Value(0)).current;
+  const tabWidth = containerWidth > 0 ? containerWidth / state.routes.length : 0;
+
+  useEffect(() => {
+    if (!tabWidth) return;
+    const targetX = state.index * tabWidth + (tabWidth - INDICATOR_WIDTH) / 2;
+    Animated.spring(translateX, {
+      toValue: targetX,
+      useNativeDriver: true,
+      speed: 18,
+      bounciness: 0,
+    }).start();
+  }, [state.index, tabWidth, translateX]);
+
+  return (
+    <View
+      style={styles.tabBar}
+      onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
+    >
+      {state.routes.map((route, index) => {
+        const { options } = descriptors[route.key];
+        const isFocused = state.index === index;
+        const { source, size } = getTabIconConfig(route.name);
+
+        const onPress = () => {
+          const event = navigation.emit({
+            type: 'tabPress',
+            target: route.key,
+            canPreventDefault: true,
+          });
+
+          if (!isFocused && !event.defaultPrevented) {
+            navigation.navigate(route.name);
+          }
+        };
+
+        return (
+          <View key={route.key} style={styles.tabButtonWrap}>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityState={isFocused ? { selected: true } : {}}
+              accessibilityLabel={options.tabBarAccessibilityLabel}
+              testID={options.tabBarButtonTestID}
+              onPress={onPress}
+              style={styles.tabButton}
+            >
+              <TabItem focused={isFocused} source={source} size={size} />
+            </TouchableOpacity>
+          </View>
+        );
+      })}
+
+      {tabWidth > 0 && (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.tabIndicator,
+            {
+              transform: [{ translateX }],
+            },
+          ]}
+        />
+      )}
     </View>
   );
 };
@@ -106,80 +173,15 @@ const AuthStack = () => (
 /* ---------- APP TABS ---------- */
 const AppTabs = () => (
   <Tab.Navigator
+    tabBar={(props) => <AnimatedTabBar {...props} />}
     screenOptions={{
       headerShown: false,
-      tabBarShowLabel: false,
-      tabBarStyle: {
-        height: 90,
-        paddingBottom: 10,
-        paddingTop: 8,
-        backgroundColor: Colors.primary,
-        borderTopWidth: 0,
-      },
-      tabBarLabelStyle: {
-        fontSize: 10,
-        marginTop: 4,
-        color: NAVY,
-      },
-      tabBarActiveTintColor: NAVY,
-      tabBarInactiveTintColor: NAVY,
     }}
   >
-    <Tab.Screen
-      name="Map"
-      component={Map}
-      options={{
-        tabBarIcon: ({ focused }) => (
-          <TabItem
-            focused={focused}
-            source={TAB_MAP_ICON}
-            size={45}
-          />
-        ),
-      }}
-    />
-
-    <Tab.Screen
-      name="Activities"
-      component={ActivitiesScreen}
-      options={{
-        tabBarIcon: ({ focused }) => (
-          <TabItem
-            focused={focused}
-            source={TAB_ACTIVITIES_ICON}
-            size={36}
-          />
-        ),
-      }}
-    />
-
-    <Tab.Screen
-      name="Messages"
-      component={ForumScreen}
-      options={{
-        tabBarIcon: ({ focused }) => (
-          <TabItem
-            focused={focused}
-            source={TAB_CHAT_ICON}
-            size={36}
-          />
-        ),
-      }}
-    />
-
-    <Tab.Screen
-      name="Profile"
-      component={ProfileScreen}
-      options={{
-        tabBarIcon: ({ focused }) => (
-          <TabItem
-            focused={focused}
-            source={TAB_PROFILE_ICON}
-            size={45}
-          />
-        ),
-      }}
-    />
+    <Tab.Screen name="Map" component={Map} />
+    <Tab.Screen name="Activities" component={ActivitiesScreen} />
+    <Tab.Screen name="Messages" component={ForumScreen} />
+    <Tab.Screen name="Profile" component={ProfileScreen} />
   </Tab.Navigator>
 );
 
@@ -255,6 +257,33 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  tabBar: {
+    height: 90,
+    paddingBottom: 10,
+    paddingTop: 8,
+    backgroundColor: Colors.primary,
+    borderTopWidth: 0,
+    flexDirection: 'row',
+    position: 'relative',
+  },
+  tabButtonWrap: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  tabButton: {
+    flex: 1,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabIndicator: {
+    position: 'absolute',
+    bottom: 10,
+    width: INDICATOR_WIDTH,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: ORANGE_DARK,
+  },
   bootScreen: {
     flex: 1,
     backgroundColor: Colors.primary,

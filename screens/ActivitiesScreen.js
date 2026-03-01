@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ const NAVY = "#1E3250";
 const ORANGE = "#FFA500";
 const IMAGE_FALLBACK_BG = "#F3F4F6";
 const ACTIVITY_TYPES = ["Activity", "Food", "Bar", "Sightseeing", "Nightlife"];
+const FILTER_OPTIONS = ["All", ...ACTIVITY_TYPES];
 
 const normalizeType = (rawType) => {
   if (!rawType || typeof rawType !== "string") return "Activity";
@@ -34,6 +35,7 @@ const ActivitiesScreen = ({ navigation }) => {
   const [activities, setActivities] = useState([]);
   const [currentGroup, setCurrentGroup] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [selectedTypeFilter, setSelectedTypeFilter] = useState("All");
 
   useFocusEffect(
     React.useCallback(() => {
@@ -209,6 +211,13 @@ const ActivitiesScreen = ({ navigation }) => {
     }
   }, [activities]);
 
+  const filteredActivities = useMemo(() => {
+    if (selectedTypeFilter === "All") return activities;
+    return activities.filter(
+      (activity) => normalizeType(activity.type) === selectedTypeFilter
+    );
+  }, [activities, selectedTypeFilter]);
+
   return (
     <View style={styles.screen}>
       <View style={[styles.headerContainer, { paddingTop: insets.top + 8 }]}>
@@ -283,7 +292,39 @@ const ActivitiesScreen = ({ navigation }) => {
               <View style={styles.activitiesList}>
                 <Text style={styles.sectionTitle}>Your activities</Text>
 
-                {activities.map((activity) => {
+                <View style={styles.filtersRow}>
+                  {FILTER_OPTIONS.map((option) => {
+                    const selected = selectedTypeFilter === option;
+                    return (
+                      <TouchableOpacity
+                        key={option}
+                        style={[
+                          styles.filterChip,
+                          selected && styles.filterChipSelected,
+                        ]}
+                        onPress={() => setSelectedTypeFilter(option)}
+                      >
+                        <Text
+                          style={[
+                            styles.filterChipText,
+                            selected && styles.filterChipTextSelected,
+                          ]}
+                        >
+                          {option}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {filteredActivities.length === 0 ? (
+                  <View style={styles.inlineEmptyCard}>
+                    <Text style={styles.inlineEmptyText}>
+                      {`No activities in "${selectedTypeFilter}" yet.`}
+                    </Text>
+                  </View>
+                ) : (
+                  filteredActivities.map((activity) => {
                   const title = activity.title || "Hotspot activity";
                   const typeLabel = normalizeType(activity.type);
                   const address = activity.address || "Location to be announced";
@@ -331,7 +372,8 @@ const ActivitiesScreen = ({ navigation }) => {
                       </View>
                     </View>
                   );
-                })}
+                })
+                )}
               </View>
             )}
           </>
@@ -449,6 +491,42 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: NAVY,
     marginBottom: 10,
+  },
+  filtersRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 10,
+  },
+  filterChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: "#F5F5F5",
+  },
+  filterChipSelected: {
+    backgroundColor: "#FFF4E5",
+    borderWidth: 1,
+    borderColor: ORANGE,
+  },
+  filterChipText: {
+    fontSize: 12,
+    color: NAVY,
+    fontWeight: "600",
+  },
+  filterChipTextSelected: {
+    color: "#B35A00",
+  },
+  inlineEmptyCard: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#EEE",
+    borderRadius: 12,
+    padding: 12,
+  },
+  inlineEmptyText: {
+    color: "#666",
+    fontSize: 13,
   },
   activityCard: {
     backgroundColor: "#FFFFFF",
